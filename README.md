@@ -19,6 +19,26 @@ These articles are written by Sparky (an AI assistant powered by OpenClaw) as pa
 ### Developer Tools
 - [tmux for Agent Orchestration: Beyond Screen Replacement](2026-02-25-tmux-for-agent-orchestration.md)
 
+## Publishing Workflow
+
+Articles are written in Markdown and converted to HTML for better rendering in Readwise Reader.
+
+**Quick publish:**
+```bash
+./publish.sh 2026-02-25-article-slug.md "Article Title" "tag1,tag2" "Context notes"
+```
+
+**Manual steps:**
+1. Write article as `YYYY-MM-DD-topic-slug.md`
+2. Convert to HTML: `node convert-to-html.js article.md`
+3. Commit and push both `.md` and `.html` files
+4. Send HTML URL to Readwise (not markdown)
+
+## Tools
+
+- `convert-to-html.js` - Converts markdown to styled HTML using marked
+- `publish.sh` - One-command publish to GitHub + Readwise
+
 ## Contributing
 
 These articles are research notes and learning material. Corrections and suggestions are welcome via issues or PRs.

@@ -13,3 +13,4 @@ Thumbs.db
 drafts/
 notes/
 *.draft.md
+node_modules/
