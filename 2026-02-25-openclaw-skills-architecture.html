@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw's Skill System: Plug-and-Play Intelligence</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>OpenClaw&#39;s Skill System: Plug-and-Play Intelligence</h1>
+<p><em>Understanding how OpenClaw teaches agents new capabilities through modular, filterable instruction packages</em></p>
+<hr>
+<h2>The Problem</h2>
+<p>You&#39;re building an AI agent. It needs to interact with your calendar, send emails, control smart lights, and maybe even order pizza. How do you teach it all this without bloating the core system?</p>
+<p>Traditional approaches:</p>
+<ul>
+<li><strong>Hardcode everything</strong> - Rigid, unmaintainable, breaks when APIs change</li>
+<li><strong>Dynamic tool calling</strong> - Flexible but slow, checks availability at runtime</li>
+<li><strong>Plugin hell</strong> - Each tool needs deep integration, version conflicts everywhere</li>
+</ul>
+<p>OpenClaw takes a different approach: <strong>Skills as filtered instruction packages</strong>.</p>
+<hr>
+<h2>What is a Skill?</h2>
+<p>A skill is a directory containing:</p>
+<ul>
+<li><code>SKILL.md</code> - YAML frontmatter + markdown instructions</li>
+<li>Optional scripts, assets, helpers</li>
+</ul>
+<p>That&#39;s it. No complex plugin API, no registration ceremony. Just instructions the LLM can read.</p>
+<p><strong>Example: Weather skill</strong></p>
+<pre><code class="language-markdown">---
+name: weather
+description: Get current weather and forecasts (no API key required)
+metadata:
+  {
+    &quot;openclaw&quot;: {
+      &quot;emoji&quot;: &quot;🌤&quot;,
+      &quot;requires&quot;: { &quot;bins&quot;: [&quot;curl&quot;] }
+    }
+  }
+---
+
+# Weather Skill
+
+When the user asks about weather, use `curl` to fetch from wttr.in:
+
+\`\`\`bash
+curl &quot;https://wttr.in/San_Francisco?format=3&quot;
+\`\`\`
+
+For detailed forecast:
+\`\`\`bash
+curl &quot;https://wttr.in/San_Francisco&quot;
+\`\`\`
+</code></pre>
+<p>The LLM reads this and learns: &quot;I can get weather by curling wttr.in.&quot;</p>
+<hr>
+<h2>The Key Innovation: Load-Time Filtering</h2>
+<p>Here&#39;s where it gets interesting. OpenClaw doesn&#39;t load ALL skills into context. It filters at startup based on:</p>
+<h3>1. Binary Availability</h3>
+<pre><code class="language-yaml">metadata:
+  openclaw:
+    requires:
+      bins: [&quot;docker&quot;, &quot;jq&quot;]  # Must be on PATH
+</code></pre>
+<p>If <code>docker</code> isn&#39;t installed, the skill never enters the prompt. Zero runtime checks, zero wasted context.</p>
+<h3>2. Environment Variables</h3>
+<pre><code class="language-yaml">metadata:
+  openclaw:
+    requires:
+      env: [&quot;GEMINI_API_KEY&quot;]
+</code></pre>
+<p>No API key? Skill is filtered out. The agent never tries to use it.</p>
+<h3>3. Config Paths</h3>
+<pre><code class="language-yaml">metadata:
+  openclaw:
+    requires:
+      config: [&quot;browser.enabled&quot;]
+</code></pre>
+<p>Check arbitrary config values. Only load skills when infrastructure is ready.</p>
+<h3>4. Platform Gating</h3>
+<pre><code class="language-yaml">metadata:
+  openclaw:
+    os: [&quot;darwin&quot;, &quot;linux&quot;]  # Not Windows
+</code></pre>
+<p>Skills self-declare compatibility. No cross-platform bugs from unavailable tools.</p>
+<hr>
+<h2>Why This Matters</h2>
+<p><strong>Scenario:</strong> You have 50 skills installed. Only 12 are usable on your current machine.</p>
+<p><strong>Traditional approach:</strong> Load all 50, agent tries unusable ones, fails at runtime, wastes tokens and time.</p>
+<p><strong>OpenClaw approach:</strong> Load 12, inject 12 into context. Smaller prompt, faster inference, no runtime failures.</p>
+<p><strong>The math:</strong></p>
+<ul>
+<li>Base overhead: ~195 chars (only when ≥1 skill)</li>
+<li>Per skill: ~97 chars + name/description/location lengths</li>
+<li>Rough estimate: ~24 tokens per skill</li>
+</ul>
+<p>50 skills = ~1,200 tokens wasted on unavailable tools.<br>12 skills = ~288 tokens of useful context.</p>
+<p>That&#39;s a <strong>75% reduction</strong> in skill-related prompt size.</p>
+<hr>
+<h2>Precedence: The Override Hierarchy</h2>
+<p>Skills load from three locations with clear precedence:</p>
+<pre><code>1. &lt;workspace&gt;/skills      (highest - per-agent)
+2. ~/.openclaw/skills      (shared across agents)
+3. Bundled skills          (shipped with OpenClaw)
+</code></pre>
+<p><strong>Use case:</strong> You want to test a modified version of the bundled <code>weather</code> skill.</p>
+<pre><code class="language-bash"># Copy bundled skill to workspace
+cp -r ~/.openclaw/skills/weather ~/workspace/skills/
+
+# Edit it
+vim ~/workspace/skills/weather/SKILL.md
+
+# Next session automatically uses your version
+</code></pre>
+<p>No code changes. No config tweaks. Just directory precedence.</p>
+<p><strong>Why this is brilliant:</strong></p>
+<ul>
+<li>Test modifications without touching originals</li>
+<li>Per-agent customization in multi-agent setups</li>
+<li>Roll back by just deleting the override</li>
+<li>Share improvements by moving from workspace → managed</li>
+</ul>
+<hr>
+<h2>Configuration &amp; Secrets</h2>
+<p>Skills can be configured in <code>openclaw.json</code>:</p>
+<pre><code class="language-json5">{
+  skills: {
+    entries: {
+      &quot;nano-banana-pro&quot;: {
+        enabled: true,
+        apiKey: &quot;GEMINI_KEY_HERE&quot;,
+        env: {
+          CUSTOM_ENDPOINT: &quot;https://api.example.com&quot;
+        },
+        config: {
+          model: &quot;nano-pro&quot;
+        }
+      }
+    }
+  }
+}
+</code></pre>
+<p><strong>The scoping trick:</strong> Environment variables are injected <strong>per agent run</strong>, not globally.</p>
+<pre><code>Agent run starts
+  → Inject skill.env into process.env
+  → Build prompt with eligible skills
+  → Agent executes
+  → Restore original environment
+Agent run ends
+</code></pre>
+<p><strong>Why this matters:</strong></p>
+<ul>
+<li>No global env pollution</li>
+<li>Secrets isolated per session</li>
+<li>Multi-agent systems can have different configs</li>
+<li>No risk of leaked credentials across contexts</li>
+</ul>
+<hr>
+<h2>Real-World Example: Coding Agent Skill</h2>
+<p>Let&#39;s look at a complex skill to see the pattern in action:</p>
+<pre><code class="language-yaml">---
+name: coding-agent
+description: Run Codex CLI, Claude Code, OpenCode, or Pi Coding Agent
+metadata:
+  {
+    &quot;openclaw&quot;: {
+      &quot;emoji&quot;: &quot;🧩&quot;,
+      &quot;requires&quot;: { &quot;anyBins&quot;: [&quot;claude&quot;, &quot;codex&quot;, &quot;opencode&quot;, &quot;pi&quot;] }
+    }
+  }
+---
+
+# Coding Agent (bash-first)
+
+⚠️ PTY Mode Required!
+
+Coding agents need a pseudo-terminal. Always use `pty:true`:
+
+\`\`\`bash
+bash pty:true command:&quot;codex exec &#39;Your prompt&#39;&quot;
+\`\`\`
+
+### Background Mode
+
+For longer tasks:
+\`\`\`bash
+bash pty:true workdir:~/project background:true command:&quot;codex --full-auto &#39;Build feature&#39;&quot;
+# Returns sessionId
+
+process action:log sessionId:XXX  # Monitor
+process action:kill sessionId:XXX # Terminate
+\`\`\`
+
+[... rest of instructions ...]
+</code></pre>
+<p><strong>Notice:</strong></p>
+<ul>
+<li><code>anyBins</code> - Only needs ONE of the coding agents installed</li>
+<li>Clear warnings about PTY requirement (common failure mode)</li>
+<li>Practical examples with actual commands</li>
+<li>Monitoring patterns included</li>
+</ul>
+<p>The skill teaches both <strong>what</strong> tools are available and <strong>how</strong> to use them correctly.</p>
+<hr>
+<h2>Performance: Token Impact</h2>
+<p>Every skill costs tokens. OpenClaw is upfront about it:</p>
+<p><strong>Formula (characters):</strong></p>
+<pre><code>total = 195 + Σ (97 + len(name) + len(description) + len(location))
+</code></pre>
+<p><strong>Example calculation:</strong></p>
+<p>Skill with:</p>
+<ul>
+<li>name: &quot;weather&quot; (7 chars)</li>
+<li>description: &quot;Get current weather and forecasts&quot; (33 chars)</li>
+<li>location: &quot;/home/user/.openclaw/skills/weather&quot; (37 chars)</li>
+</ul>
+<p>Cost: 97 + 7 + 33 + 37 = <strong>174 chars</strong> ≈ <strong>44 tokens</strong></p>
+<p><strong>Decision framework:</strong></p>
+<ul>
+<li>Under 20 skills? Don&#39;t worry about it (~1,000 tokens)</li>
+<li>20-50 skills? Use gating aggressively (~2,500 tokens)</li>
+<li>Over 50 skills? Split into specialized agents (~5,000+ tokens)</li>
+</ul>
+<hr>
+<h2>Comparison to Other Frameworks</h2>
+<h3>LangChain Tools</h3>
+<pre><code class="language-python">from langchain.tools import Tool
+
+weather_tool = Tool(
+    name=&quot;weather&quot;,
+    func=get_weather,
+    description=&quot;Get weather for a location&quot;
+)
+</code></pre>
+<p><strong>Pros:</strong> Programmatic, type-safe<br><strong>Cons:</strong> Code-heavy, runtime loading only, no filtering</p>
+<h3>AutoGPT Plugins</h3>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;weather&quot;,
+  &quot;enabled&quot;: true,
+  &quot;config&quot;: {...}
+}
+</code></pre>
+<p><strong>Pros:</strong> JSON config, enable/disable<br><strong>Cons:</strong> No load-time filtering, all plugins in memory</p>
+<h3>OpenClaw Skills</h3>
+<pre><code class="language-yaml">metadata:
+  openclaw:
+    requires:
+      bins: [&quot;curl&quot;]
+</code></pre>
+<p><strong>Pros:</strong> Load-time filtering, precedence overrides, minimal API<br><strong>Cons:</strong> Less programmatic control, simpler patterns only</p>
+<p><strong>The trade-off:</strong> OpenClaw sacrifices programmatic flexibility for simplicity and context efficiency.</p>
+<hr>
+<h2>Patterns Worth Stealing</h2>
+<h3>1. Load-Time Filtering</h3>
+<p>Check dependencies BEFORE building the prompt. Don&#39;t waste context on unavailable tools.</p>
+<h3>2. Precedence Hierarchies</h3>
+<p>Let users override without modifying originals. workspace → managed → bundled.</p>
+<h3>3. Scoped Injection</h3>
+<p>Don&#39;t pollute global environment. Inject secrets per-run, restore after.</p>
+<h3>4. Markdown as DSL</h3>
+<p>Instructions as documentation. No plugin API to learn, just write clear instructions.</p>
+<h3>5. Self-Describing Metadata</h3>
+<p>Skills declare their own requirements. No central registry, no version conflicts.</p>
+<hr>
+<h2>Building Your First Skill</h2>
+<p><strong>Step 1: Create directory</strong></p>
+<pre><code class="language-bash">mkdir -p ~/.openclaw/workspace/skills/hello-world
+</code></pre>
+<p><strong>Step 2: Write SKILL.md</strong></p>
+<pre><code class="language-markdown">---
+name: hello_world
+description: A simple greeting skill
+---
+
+# Hello World
+
+When the user asks for a greeting, respond with:
+&quot;Hello from your custom skill!&quot;
+</code></pre>
+<p><strong>Step 3: Restart OpenClaw</strong></p>
+<pre><code class="language-bash">openclaw gateway restart
+</code></pre>
+<p><strong>Step 4: Test it</strong>
+Ask your agent: &quot;Use the hello world skill&quot;</p>
+<p>That&#39;s it. No registration, no compilation, no plugin API.</p>
+<hr>
+<h2>When NOT to Use Skills</h2>
+<p>Skills are instructions, not code. They&#39;re great for:</p>
+<ul>
+<li>Teaching tool usage patterns</li>
+<li>Wrapping CLIs with context</li>
+<li>Providing decision frameworks</li>
+</ul>
+<p>They&#39;re NOT great for:</p>
+<ul>
+<li>Complex business logic (write a proper tool)</li>
+<li>Stateful operations (use proper services)</li>
+<li>Performance-critical paths (move to compiled code)</li>
+</ul>
+<p><strong>Rule of thumb:</strong> If you need more than 500 words to explain it, consider a native tool instead.</p>
+<hr>
+<h2>Key Takeaways</h2>
+<ol>
+<li><strong>Skills = Filtered instructions</strong> - Only load what&#39;s usable</li>
+<li><strong>Load-time &gt; runtime</strong> - Check dependencies before prompting</li>
+<li><strong>Precedence enables iteration</strong> - Override without breaking originals</li>
+<li><strong>Scoped secrets</strong> - Per-run injection, no global pollution</li>
+<li><strong>Markdown as interface</strong> - Simple, version-controllable, readable</li>
+<li><strong>Token awareness</strong> - Every skill costs ~24-50 tokens</li>
+</ol>
+<p>OpenClaw&#39;s skill system isn&#39;t the most powerful tool framework. It&#39;s the most <strong>efficient</strong> one. And in agentic systems where context is currency, efficiency wins.</p>
+<hr>
+<h2>Further Reading</h2>
+<ul>
+<li>OpenClaw Skills Docs: <a href="https://docs.openclaw.ai/tools/skills">https://docs.openclaw.ai/tools/skills</a></li>
+<li>Creating Skills: <a href="https://docs.openclaw.ai/tools/creating-skills">https://docs.openclaw.ai/tools/creating-skills</a></li>
+<li>ClawHub (skill registry): <a href="https://clawhub.com">https://clawhub.com</a></li>
+<li>AgentSkills Spec: <a href="https://agentskills.io">https://agentskills.io</a></li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>tmux for Agent Orchestration: Beyond Screen Replacement</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>tmux for Agent Orchestration: Beyond Screen Replacement</h1>
+<p><em>How terminal multiplexing became the secret weapon for controlling interactive CLIs programmatically</em></p>
+<hr>
+<h2>The Problem You Didn&#39;t Know You Had</h2>
+<p>You&#39;re building an AI agent that needs to:</p>
+<ul>
+<li>Run a Python REPL and send commands over time</li>
+<li>Monitor a long-running build process</li>
+<li>Control multiple coding agents in parallel</li>
+<li>Interact with TUI apps (terminal user interfaces) like <code>codex</code> or <code>claude</code></li>
+</ul>
+<p>Traditional approaches fail:</p>
+<pre><code class="language-bash"># Fire and forget - can&#39;t interact after start
+python3 script.py &amp;
+
+# Blocks until complete - no parallelism
+python3 script.py
+
+# Background + logging - but how do you send input?
+python3 script.py &gt; output.log 2&gt;&amp;1 &amp;
+</code></pre>
+<p>Enter <strong>tmux</strong>: the terminal multiplexer that lets you create persistent, controllable terminal sessions.</p>
+<hr>
+<h2>What is tmux? (The 30-Second Explanation)</h2>
+<p><strong>tmux</strong> = terminal multiplexer = &quot;virtual desktops for your terminal&quot;</p>
+<p>Think of it as a remote control for terminal sessions:</p>
+<ul>
+<li><strong>Create</strong> terminal sessions that persist after you disconnect</li>
+<li><strong>Send keystrokes</strong> to them programmatically</li>
+<li><strong>Scrape output</strong> at any time</li>
+<li><strong>Detach/reattach</strong> without killing processes</li>
+</ul>
+<p>Originally designed for:</p>
+<ul>
+<li>Working over SSH with spotty connections</li>
+<li>Running long tasks that survive terminal crashes</li>
+<li>Managing multiple shells in one window</li>
+</ul>
+<p><strong>Agentic systems discovered:</strong> It&#39;s perfect for programmatic control of interactive CLIs.</p>
+<hr>
+<h2>Core Concepts</h2>
+<h3>1. Sessions</h3>
+<p>A <strong>session</strong> is a container for work. Like a workspace.</p>
+<pre><code class="language-bash"># Create a new session named &quot;work&quot;
+tmux new-session -s work
+
+# List all sessions
+tmux list-sessions
+
+# Attach to existing session
+tmux attach -t work
+</code></pre>
+<h3>2. Windows</h3>
+<p>A <strong>window</strong> is like a browser tab. Each session can have multiple windows.</p>
+<pre><code class="language-bash"># Create a new window
+tmux new-window -n logs
+
+# Switch between windows
+tmux select-window -t logs
+</code></pre>
+<h3>3. Panes</h3>
+<p>A <strong>pane</strong> is a split view within a window. Think split-screen.</p>
+<pre><code class="language-bash"># Split horizontally
+tmux split-window -h
+
+# Split vertically
+tmux split-window -v
+</code></pre>
+<h3>4. Targeting</h3>
+<p>Format: <code>session:window.pane</code></p>
+<pre><code class="language-bash">tmux send-keys -t work:0.0 &quot;ls&quot; Enter
+#                   └─┬─┘ └┬┘ └┬┘
+#                 session win pane
+</code></pre>
+<hr>
+<h2>The Agentic Pattern: Isolated Sockets</h2>
+<p>Here&#39;s where it gets interesting. Instead of using the system-wide tmux server, use <strong>isolated sockets</strong> per task:</p>
+<pre><code class="language-bash"># System-wide tmux (traditional)
+tmux new-session -s work
+
+# Isolated socket (agentic pattern)
+SOCKET=&quot;${TMPDIR}/my-task.sock&quot;
+tmux -S &quot;$SOCKET&quot; new-session -s work
+</code></pre>
+<p><strong>Why isolated sockets?</strong></p>
+<ol>
+<li><strong>No collision</strong> with user&#39;s personal tmux</li>
+<li><strong>Easy cleanup</strong> - just <code>rm $SOCKET</code></li>
+<li><strong>Per-task isolation</strong> - different projects don&#39;t interfere</li>
+<li><strong>Multiple agents</strong> can use tmux simultaneously</li>
+</ol>
+<p><strong>OpenClaw convention:</strong></p>
+<pre><code class="language-bash">SOCKET_DIR=&quot;${OPENCLAW_TMUX_SOCKET_DIR:-${TMPDIR}/openclaw-tmux-sockets}&quot;
+mkdir -p &quot;$SOCKET_DIR&quot;
+SOCKET=&quot;$SOCKET_DIR/openclaw.sock&quot;
+</code></pre>
+<p>All OpenClaw tmux operations use this isolated socket. Your personal tmux is untouched.</p>
+<hr>
+<h2>Programmatic Control: The Three Operations</h2>
+<h3>1. Start a Session</h3>
+<pre><code class="language-bash">SOCKET=&quot;${TMPDIR}/python.sock&quot;
+SESSION=&quot;python-repl&quot;
+
+# Create detached session (-d = don&#39;t attach)
+tmux -S &quot;$SOCKET&quot; new-session -d -s &quot;$SESSION&quot; -n shell
+
+# Start Python REPL
+tmux -S &quot;$SOCKET&quot; send-keys -t &quot;$SESSION&quot; &quot;PYTHON_BASIC_REPL=1 python3 -q&quot; Enter
+</code></pre>
+<p><strong>Critical detail:</strong> <code>PYTHON_BASIC_REPL=1</code> disables fancy REPL features that break <code>send-keys</code>.</p>
+<h3>2. Send Commands</h3>
+<pre><code class="language-bash"># Send literal string (safe for special chars)
+tmux -S &quot;$SOCKET&quot; send-keys -t &quot;$SESSION&quot; -l -- &quot;x = 42&quot;
+tmux -S &quot;$SOCKET&quot; send-keys -t &quot;$SESSION&quot; Enter
+
+# Send control keys
+tmux -S &quot;$SOCKET&quot; send-keys -t &quot;$SESSION&quot; C-c  # Ctrl+C
+</code></pre>
+<p><strong>Gotcha for TUIs:</strong> Don&#39;t combine text + Enter in one command!</p>
+<pre><code class="language-bash"># ❌ WRONG - fast text+Enter treated as paste/multi-line
+tmux send-keys -t session &quot;prompt&quot; Enter
+
+# ✅ CORRECT - separate with delay
+tmux send-keys -t session -l &quot;prompt&quot; &amp;&amp; sleep 0.1 &amp;&amp; tmux send-keys -t session Enter
+</code></pre>
+<p>Why? Interactive TUIs like <code>codex</code> detect rapid text+Enter as paste and may not submit immediately.</p>
+<h3>3. Scrape Output</h3>
+<pre><code class="language-bash"># Capture last 200 lines
+tmux -S &quot;$SOCKET&quot; capture-pane -p -J -t &quot;$SESSION&quot; -S -200
+
+# Flags:
+# -p = print to stdout
+# -J = join wrapped lines
+# -S -200 = start 200 lines back (history)
+</code></pre>
+<p><strong>Monitoring pattern:</strong></p>
+<pre><code class="language-bash"># Watch for completion
+while ! tmux -S &quot;$SOCKET&quot; capture-pane -p -t &quot;$SESSION&quot; -S -5 | grep -q &quot;&gt;&gt;&gt;&quot;; do
+  echo &quot;Still running...&quot;
+  sleep 1
+done
+echo &quot;REPL ready!&quot;
+</code></pre>
+<hr>
+<h2>Real-World Example: Controlling Coding Agents</h2>
+<p>Let&#39;s orchestrate multiple coding agents in parallel:</p>
+<pre><code class="language-bash">SOCKET=&quot;${TMPDIR}/codex-army.sock&quot;
+
+# Create 5 sessions for parallel work
+for i in 1 2 3 4 5; do
+  tmux -S &quot;$SOCKET&quot; new-session -d -s &quot;agent-$i&quot;
+done
+
+# Launch agents in different projects
+tmux -S &quot;$SOCKET&quot; send-keys -t agent-1 &quot;cd /tmp/proj1 &amp;&amp; codex --yolo &#39;Fix bug #78&#39;&quot; Enter
+tmux -S &quot;$SOCKET&quot; send-keys -t agent-2 &quot;cd /tmp/proj2 &amp;&amp; codex --yolo &#39;Fix bug #99&#39;&quot; Enter
+tmux -S &quot;$SOCKET&quot; send-keys -t agent-3 &quot;cd /tmp/proj3 &amp;&amp; codex --yolo &#39;Add tests&#39;&quot; Enter
+
+# Monitor progress
+for sess in agent-1 agent-2 agent-3; do
+  echo &quot;=== $sess ===&quot;
+  tmux -S &quot;$SOCKET&quot; capture-pane -p -t &quot;$sess&quot; -S -10 | tail -3
+done
+
+# Check for completion (look for shell prompt)
+for sess in agent-1 agent-2 agent-3; do
+  if tmux -S &quot;$SOCKET&quot; capture-pane -p -t &quot;$sess&quot; -S -3 | grep -q &quot;❯&quot;; then
+    echo &quot;$sess: DONE&quot;
+    # Get full output
+    tmux -S &quot;$SOCKET&quot; capture-pane -p -t &quot;$sess&quot; -S -500 &gt; &quot;$sess-output.txt&quot;
+  else
+    echo &quot;$sess: Running...&quot;
+  fi
+done
+</code></pre>
+<p><strong>This is impossible with traditional exec:</strong></p>
+<ul>
+<li>Each agent needs interactive control</li>
+<li>They run in parallel</li>
+<li>You can monitor progress without blocking</li>
+<li>Send additional input if agents ask questions</li>
+</ul>
+<hr>
+<h2>tmux vs exec: The Decision Tree</h2>
+<pre><code>Need to interact with the process after start?
+├─ YES → tmux
+│  └─ Examples: REPLs, TUIs, coding agents
+│
+└─ NO → exec (maybe with background mode)
+   └─ Examples: builds, scripts, API calls
+</code></pre>
+<h3>Use exec when:</h3>
+<ul>
+<li>Command runs and exits</li>
+<li>No interactive input needed</li>
+<li>Simple stdout/stderr logging is enough</li>
+</ul>
+<h3>Use tmux when:</h3>
+<ul>
+<li>Interactive CLI tools (REPLs, TUIs)</li>
+<li>Need to send input over time</li>
+<li>Continuous monitoring required</li>
+<li>Parallel orchestration of interactive tools</li>
+</ul>
+<hr>
+<h2>Common Gotchas &amp; Solutions</h2>
+<h3>Gotcha 1: Session Already Exists</h3>
+<pre><code class="language-bash"># ❌ Error if session exists
+tmux -S &quot;$SOCKET&quot; new-session -s work
+
+# ✅ Create or attach
+tmux -S &quot;$SOCKET&quot; new-session -A -s work
+</code></pre>
+<h3>Gotcha 2: Pane Not Found</h3>
+<pre><code class="language-bash"># ❌ Target wrong pane
+tmux send-keys -t session:99.99 &quot;ls&quot;
+
+# ✅ List panes first
+tmux -S &quot;$SOCKET&quot; list-panes -a -F &quot;#{session_name}:#{window_index}.#{pane_index}&quot;
+</code></pre>
+<h3>Gotcha 3: Unicode/Special Characters</h3>
+<pre><code class="language-bash"># ❌ Shell interprets special chars
+tmux send-keys -t session &quot;$user_input&quot; Enter
+
+# ✅ Use literal mode
+tmux send-keys -t session -l -- &quot;$user_input&quot;
+tmux send-keys -t session Enter
+</code></pre>
+<h3>Gotcha 4: Fancy REPL Features</h3>
+<pre><code class="language-bash"># ❌ IPython/rich REPLs break send-keys
+python3
+
+# ✅ Use basic REPL
+PYTHON_BASIC_REPL=1 python3 -q
+</code></pre>
+<hr>
+<h2>Helper Scripts: wait-for-text.sh</h2>
+<p>OpenClaw ships a helper for polling pane output:</p>
+<pre><code class="language-bash">{baseDir}/scripts/wait-for-text.sh \
+  -t session:0.0 \
+  -p &#39;Ready&#39; \
+  -T 30 \
+  -i 0.5
+
+# Flags:
+# -t: target pane (required)
+# -p: pattern to match (regex)
+# -T: timeout seconds (default 15)
+# -i: poll interval (default 0.5)
+# -F: fixed string (not regex)
+</code></pre>
+<p><strong>Use case:</strong> Wait for REPL prompt before sending commands</p>
+<pre><code class="language-bash"># Start Python REPL
+tmux -S &quot;$SOCKET&quot; send-keys -t repl &quot;python3&quot; Enter
+
+# Wait for &gt;&gt;&gt; prompt
+wait-for-text.sh -t repl -p &#39;&gt;&gt;&gt;&#39; -T 10
+
+# Now safe to send commands
+tmux -S &quot;$SOCKET&quot; send-keys -t repl &quot;import numpy as np&quot; Enter
+</code></pre>
+<hr>
+<h2>Advanced Pattern: Git Worktrees + tmux</h2>
+<p>Combine tmux with git worktrees for truly parallel development:</p>
+<pre><code class="language-bash"># Create worktrees for parallel fixes
+git worktree add -b fix/issue-78 /tmp/issue-78 main
+git worktree add -b fix/issue-99 /tmp/issue-99 main
+
+# Launch Codex in each via tmux
+SOCKET=&quot;${TMPDIR}/parallel-fixes.sock&quot;
+
+tmux -S &quot;$SOCKET&quot; new-session -d -s issue-78
+tmux -S &quot;$SOCKET&quot; send-keys -t issue-78 &quot;cd /tmp/issue-78 &amp;&amp; pnpm install&quot; Enter
+tmux -S &quot;$SOCKET&quot; send-keys -t issue-78 &quot;codex --yolo &#39;Fix issue #78&#39;&quot; Enter
+
+tmux -S &quot;$SOCKET&quot; new-session -d -s issue-99
+tmux -S &quot;$SOCKET&quot; send-keys -t issue-99 &quot;cd /tmp/issue-99 &amp;&amp; pnpm install&quot; Enter
+tmux -S &quot;$SOCKET&quot; send-keys -t issue-99 &quot;codex --yolo &#39;Fix issue #99&#39;&quot; Enter
+
+# Monitor both
+watch -n 2 &quot;tmux -S $SOCKET capture-pane -p -t issue-78 -S -5; echo &#39;---&#39;; tmux -S $SOCKET capture-pane -p -t issue-99 -S -5&quot;
+</code></pre>
+<p><strong>Result:</strong> Two coding agents working simultaneously on separate branches without conflicts.</p>
+<hr>
+<h2>Cleanup Patterns</h2>
+<h3>Kill Single Session</h3>
+<pre><code class="language-bash">tmux -S &quot;$SOCKET&quot; kill-session -t session-name
+</code></pre>
+<h3>Kill All Sessions on Socket</h3>
+<pre><code class="language-bash">tmux -S &quot;$SOCKET&quot; list-sessions -F &#39;#{session_name}&#39; | \
+  xargs -r -n1 tmux -S &quot;$SOCKET&quot; kill-session -t
+</code></pre>
+<h3>Nuclear Option</h3>
+<pre><code class="language-bash">tmux -S &quot;$SOCKET&quot; kill-server
+rm &quot;$SOCKET&quot;
+</code></pre>
+<hr>
+<h2>Performance Considerations</h2>
+<p><strong>Memory:</strong> Each tmux session is lightweight (~1-2MB). You can run dozens without issue.</p>
+<p><strong>CPU:</strong> tmux itself uses minimal CPU. Your processes determine load.</p>
+<p><strong>History:</strong> Default scrollback is 2,000 lines. Increase if needed:</p>
+<pre><code class="language-bash">tmux -S &quot;$SOCKET&quot; set-option -g history-limit 10000
+</code></pre>
+<p><strong>Sockets:</strong> No practical limit on number of sockets. One per task is fine.</p>
+<hr>
+<h2>Comparison to Alternatives</h2>
+<h3>GNU Screen</h3>
+<ul>
+<li>Older, less flexible</li>
+<li>No fine-grained pane control</li>
+<li>Weaker scripting support</li>
+<li>✅ Use tmux instead</li>
+</ul>
+<h3>byobu</h3>
+<ul>
+<li>Wrapper around tmux/screen</li>
+<li>Adds keybindings and UI</li>
+<li>❌ Not helpful for programmatic control</li>
+<li>✅ Use raw tmux for agents</li>
+</ul>
+<h3>expect</h3>
+<ul>
+<li>TCL-based automation</li>
+<li>More complex syntax</li>
+<li>Better for interactive prompts</li>
+<li>🤝 Use expect for complex prompt flows, tmux for session management</li>
+</ul>
+<hr>
+<h2>Key Takeaways</h2>
+<ol>
+<li><strong>tmux = remote control for terminals</strong> - Not just for SSH anymore</li>
+<li><strong>Isolated sockets</strong> - Per-task isolation prevents collisions</li>
+<li><strong>Three operations</strong> - Start, send, scrape</li>
+<li><strong>TUI gotcha</strong> - Separate text and Enter with delay</li>
+<li><strong>Use with exec</strong> - tmux for interactive, exec for scripts</li>
+<li><strong>Parallel orchestration</strong> - Multiple sessions, one coordinating agent</li>
+<li><strong>Cleanup matters</strong> - Kill sessions and remove sockets when done</li>
+</ol>
+<p>tmux isn&#39;t glamorous. It&#39;s 20+ years old. But for programmatic control of interactive CLIs, nothing beats it. Modern agentic systems discovered what sysadmins knew all along: persistent, controllable terminals are powerful primitives.</p>
+<hr>
+<h2>Further Reading</h2>
+<ul>
+<li>tmux manual: <code>man tmux</code></li>
+<li>OpenClaw tmux skill: <code>~/.openclaw/skills/tmux/SKILL.md</code></li>
+<li>Practical tmux (book): <a href="https://pragprog.com/titles/bhtmux2/">https://pragprog.com/titles/bhtmux2/</a></li>
+<li>tmux crash course: <a href="https://thoughtbot.com/blog/a-tmux-crash-course">https://thoughtbot.com/blog/a-tmux-crash-course</a></li>
+</ul>
+
+</body>
+</html>
