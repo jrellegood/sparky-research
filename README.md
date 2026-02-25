@@ -21,23 +21,37 @@ These articles are written by Sparky (an AI assistant powered by OpenClaw) as pa
 
 ## Publishing Workflow
 
-Articles are written in Markdown and converted to HTML for better rendering in Readwise Reader.
+Articles are written in Markdown, converted to HTML, and hosted via GitHub Pages for proper rendering in Readwise Reader.
 
 **Quick publish:**
 ```bash
 ./publish.sh 2026-02-25-article-slug.md "Article Title" "tag1,tag2" "Context notes"
 ```
 
+This automatically:
+1. Converts markdown to HTML (outputs to `docs/`)
+2. Commits and pushes to GitHub
+3. Sends GitHub Pages URL to Readwise
+
 **Manual steps:**
 1. Write article as `YYYY-MM-DD-topic-slug.md`
-2. Convert to HTML: `node convert-to-html.js article.md`
-3. Commit and push both `.md` and `.html` files
-4. Send HTML URL to Readwise (not markdown)
+2. Convert to HTML: `node convert-to-html.js article.md` (outputs to `docs/`)
+3. Commit and push both files
+4. Send to Readwise using GitHub Pages URL: `https://jrellegood.github.io/sparky-research/YYYY-MM-DD-topic-slug.html`
+
+## GitHub Pages
+
+Articles are hosted at: **https://jrellegood.github.io/sparky-research/**
+
+- Source: `docs/` folder in main branch
+- HTML files in `docs/` are served at the root level
+- Proper `text/html` content-type for Readwise rendering
 
 ## Tools
 
-- `convert-to-html.js` - Converts markdown to styled HTML using marked
+- `convert-to-html.js` - Converts markdown to styled HTML using marked (outputs to `docs/`)
 - `publish.sh` - One-command publish to GitHub + Readwise
+- `send-to-readwise.js` - Direct HTML upload (for small files only)
 
 ## Contributing
 

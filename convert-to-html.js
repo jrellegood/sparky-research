@@ -126,7 +126,8 @@ if (process.argv.length < 3) {
 }
 
 const inputFile = process.argv[2];
-const outputFile = process.argv[3] || inputFile.replace(/\.md$/, '.html');
+const basename = require('path').basename(inputFile);
+const outputFile = process.argv[3] || `docs/${basename.replace(/\.md$/, '.html')}`;
 
 try {
   const markdown = fs.readFileSync(inputFile, 'utf8');

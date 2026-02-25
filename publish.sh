@@ -19,10 +19,11 @@ if [ ! -f "$MARKDOWN_FILE" ]; then
     exit 1
 fi
 
-# Convert to HTML
+# Convert to HTML (outputs to docs/)
 echo "Converting to HTML..."
 node convert-to-html.js "$MARKDOWN_FILE"
-HTML_FILE="${MARKDOWN_FILE%.md}.html"
+HTML_BASENAME=$(basename "${MARKDOWN_FILE%.md}.html")
+HTML_FILE="docs/$HTML_BASENAME"
 
 # Commit and push
 echo "Committing to git..."
@@ -35,8 +36,8 @@ git push origin main
 # Wait a moment for GitHub to process
 sleep 2
 
-# Send to Readwise
-HTML_URL="https://raw.githubusercontent.com/jrellegood/sparky-research/main/$HTML_FILE"
+# Send to Readwise (GitHub Pages URL)
+HTML_URL="https://jrellegood.github.io/sparky-research/$HTML_BASENAME"
 echo "Sending to Readwise: $HTML_URL"
 
 curl -X POST https://readwise.io/api/v3/save/ \
