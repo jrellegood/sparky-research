@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Git Worktrees: The Secret Weapon for Parallel Development</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Git Worktrees: The Secret Weapon for Parallel Development</h1>
+<p><strong>For:</strong> Engineers running multiple coding agents, juggling hotfixes, or just tired of context switching<br><strong>Runtime:</strong> 7 min read<br><strong>Date:</strong> 2026-02-26</p>
+<hr>
+<h2>The Context-Switching Tax</h2>
+<p>You&#39;re deep in a refactor. Tests are passing. Code is clean. Then: &quot;Production is down, urgent hotfix needed.&quot;</p>
+<p>Your options suck:</p>
+<pre><code class="language-bash"># Option 1: Commit half-baked work
+git add . &amp;&amp; git commit -m &quot;WIP: this breaks everything&quot;
+git checkout main
+
+# Option 2: Stash and pray
+git stash
+git checkout main
+# Fix the bug
+git checkout feature-branch
+git stash pop  # merge conflicts incoming...
+
+# Option 3: Clone the repo again
+cd ..
+git clone git@github.com:yourorg/project.git project-hotfix
+cd project-hotfix
+git checkout main
+</code></pre>
+<p>All three options are bad. The first pollutes history. The second risks merge conflicts. The third wastes disk space and loses local configuration.</p>
+<p><strong>Git worktrees</strong> solve this. They let you work on multiple branches simultaneously in separate directories, all sharing the same Git history.</p>
+<h2>What Are Worktrees?</h2>
+<p>Think of your repository as a library. Traditionally, Git gives you one reading room where you can only read one book (branch) at a time. Want to reference another book? Close the current one, fetch the other, open it.</p>
+<p>Worktrees are like having multiple reading rooms. Same library, same books, but you can have different books open in different rooms simultaneously.</p>
+<p>Concretely:</p>
+<pre><code class="language-bash">project/                    # Main repo (feature-branch)
+├── src/
+├── README.md
+└── .git/                   # The actual Git database
+
+project-hotfix/             # Worktree (main branch)
+├── src/                    # Same files, different state
+├── README.md
+└── .git                    # File pointing to main .git/
+
+project-experiment/         # Another worktree (experimental branch)
+├── src/
+├── README.md
+└── .git
+</code></pre>
+<p>All three directories share the same Git history (objects, commits, branches). But each can have different files checked out.</p>
+<h2>The Basic Workflow</h2>
+<h3>Creating a Worktree</h3>
+<pre><code class="language-bash"># You&#39;re on feature-branch, urgent hotfix needed
+git worktree add ../project-hotfix main
+
+# This creates:
+# - New directory at ../project-hotfix
+# - Checks out &#39;main&#39; branch there
+# - Links it to your main .git directory
+</code></pre>
+<p>Now you can:</p>
+<pre><code class="language-bash"># In one terminal
+cd ~/project
+# Continue feature work
+
+# In another terminal
+cd ~/project-hotfix
+# Fix the bug, commit, push
+git add . &amp;&amp; git commit -m &quot;Fix critical bug&quot;
+git push origin main
+</code></pre>
+<p><strong>No context switch.</strong> No stashing. No losing your place.</p>
+<h3>Listing Worktrees</h3>
+<pre><code class="language-bash">$ git worktree list
+
+/home/you/project           bd54845 [feature-branch]
+/home/you/project-hotfix    a1b2c3d [main]
+/home/you/project-experiment 4e5f6a7 [experimental]
+</code></pre>
+<h3>Cleaning Up</h3>
+<pre><code class="language-bash"># When done with the hotfix
+cd ~/project
+git worktree remove ../project-hotfix
+
+# Or force removal (nukes uncommitted changes)
+git worktree remove --force ../project-hotfix
+
+# Clean up stale worktree references
+git worktree prune
+</code></pre>
+<h2>Real-World Patterns</h2>
+<h3>Pattern 1: Parallel AI Coding Agents</h3>
+<p>You&#39;re orchestrating multiple Claude Code sessions to tackle different issues:</p>
+<pre><code class="language-bash"># Main repo stays on develop
+cd ~/myapp
+
+# Spawn worktrees for each agent
+git worktree add ../myapp-issue-123 -b fix/auth-bug
+git worktree add ../myapp-issue-124 -b feat/api-v2
+git worktree add ../myapp-issue-125 -b refactor/models
+
+# Launch agents in tmux
+tmux new-session -d -s agent-123 -c ~/myapp-issue-123
+tmux send-keys -t agent-123 &quot;claude&quot; Enter
+
+tmux new-session -d -s agent-124 -c ~/myapp-issue-124
+tmux send-keys -t agent-124 &quot;claude&quot; Enter
+
+tmux new-session -d -s agent-125 -c ~/myapp-issue-125
+tmux send-keys -t agent-125 &quot;claude&quot; Enter
+</code></pre>
+<p>Each agent gets:</p>
+<ul>
+<li>Isolated environment</li>
+<li>No risk of stepping on each other</li>
+<li>Independent test runs</li>
+<li>Parallel commits</li>
+</ul>
+<p>When done, review each worktree, merge the good ones, nuke the experiments.</p>
+<h3>Pattern 2: PR Review + Testing</h3>
+<p>You need to review a PR while keeping your current work intact:</p>
+<pre><code class="language-bash"># Create worktree from PR branch
+git fetch origin pull/456/head:pr-456
+git worktree add ../myapp-pr-review pr-456
+
+# In another terminal
+cd ~/myapp-pr-review
+npm test  # Run tests in isolation
+npm start # Fire up dev server on port 3000
+
+# Meanwhile, in main repo
+cd ~/myapp
+# Continue your work on port 3001
+</code></pre>
+<p>No branch switching. Both environments running simultaneously. Compare implementations side-by-side in your IDE.</p>
+<h3>Pattern 3: Speculative Work</h3>
+<p>Try multiple approaches without committing to any:</p>
+<pre><code class="language-bash">git worktree add ../project-approach-a -b experiment/approach-a
+git worktree add ../project-approach-b -b experiment/approach-b
+
+# Implement both, benchmark them
+cd ~/project-approach-a
+# ... write code ...
+hyperfine &#39;./bench.sh&#39;
+
+cd ~/project-approach-b
+# ... write code ...
+hyperfine &#39;./bench.sh&#39;
+</code></pre>
+<p>Keep the winner, delete the loser. No stash juggling, no <code>git reset --hard</code> anxiety.</p>
+<h3>Pattern 4: Long-Running Build Monitoring</h3>
+<pre><code class="language-bash"># Kick off slow build in worktree
+git worktree add ../myapp-ci main
+cd ~/myapp-ci
+./run-full-test-suite.sh  # Takes 30 minutes
+
+# Meanwhile, continue feature work
+cd ~/myapp
+# Keep coding while tests run
+</code></pre>
+<p>When tests finish, you haven&#39;t lost context.</p>
+<h2>Worktrees vs Branches: When to Use Each</h2>
+<h3>Use Branches When:</h3>
+<ul>
+<li>You&#39;re working on <strong>one thing at a time</strong></li>
+<li>Context switching is rare</li>
+<li>You&#39;re comfortable with stashing</li>
+<li>Disk space is tight</li>
+</ul>
+<h3>Use Worktrees When:</h3>
+<ul>
+<li>You&#39;re running <strong>multiple coding agents</strong></li>
+<li>You frequently <strong>compare implementations</strong></li>
+<li>You need to <strong>review PRs</strong> while keeping current work</li>
+<li>You want <strong>parallel test runs</strong></li>
+<li>You&#39;re doing <strong>speculative experiments</strong></li>
+</ul>
+<h2>Advanced Tips</h2>
+<h3>1. Create Worktree + New Branch in One Command</h3>
+<pre><code class="language-bash"># Creates worktree and new branch based on main
+git worktree add -b new-feature ../project-feature main
+</code></pre>
+<h3>2. Locked Worktrees (for Network Drives)</h3>
+<pre><code class="language-bash"># Prevent auto-cleanup for worktrees on removable media
+git worktree lock ../project-external
+</code></pre>
+<h3>3. Move a Worktree</h3>
+<pre><code class="language-bash"># Oops, created in wrong location
+git worktree move project-hotfix ../better-location/project-hotfix
+</code></pre>
+<h3>4. Repair Broken Links</h3>
+<pre><code class="language-bash"># Manually moved a worktree? Fix the references
+git worktree repair ../manually-moved-worktree
+</code></pre>
+<h3>5. Shared .git for Faster Clones</h3>
+<p>Worktrees share the <code>.git</code> directory, so:</p>
+<ul>
+<li><strong>Disk usage:</strong> Mostly just working files (2x-3x cheaper than cloning)</li>
+<li><strong>Fetch/pull:</strong> Updates are shared across all worktrees</li>
+<li><strong>Branch checkout:</strong> Instant (no fetch needed)</li>
+</ul>
+<h2>Gotchas</h2>
+<h3>1. Same Branch Can&#39;t Be Checked Out Twice</h3>
+<pre><code class="language-bash">git worktree add ../project-copy main
+# Error: &#39;main&#39; is already checked out at &#39;/home/you/project&#39;
+</code></pre>
+<p>Solution: Create a new branch or use a detached HEAD:</p>
+<pre><code class="language-bash">git worktree add ../project-copy -b main-copy main
+# or
+git worktree add --detach ../project-copy main
+</code></pre>
+<h3>2. Submodules Need Manual Init</h3>
+<pre><code class="language-bash">git worktree add ../project-feature feature-branch
+cd ../project-feature
+git submodule update --init --recursive  # Don&#39;t forget!
+</code></pre>
+<h3>3. Worktrees Are Local</h3>
+<p>Worktrees exist on your machine only. They&#39;re not in <code>.git/config</code>, they&#39;re in <code>.git/worktrees/</code>. When you clone on another machine, you start fresh.</p>
+<h2>The Agentic Multiplier</h2>
+<p>Here&#39;s why worktrees are a game-changer for AI-assisted development:</p>
+<p><strong>Before:</strong> You ask Claude Code to refactor a module. Halfway through, you realize you want to try a different approach. You either interrupt the agent or let it finish and start over.</p>
+<p><strong>With worktrees:</strong></p>
+<pre><code class="language-bash">git worktree add ../project-refactor-v1 -b refactor/v1
+git worktree add ../project-refactor-v2 -b refactor/v2
+
+# Run two Claude sessions simultaneously
+tmux new -s claude-v1 -c ~/project-refactor-v1
+tmux new -s claude-v2 -c ~/project-refactor-v2
+</code></pre>
+<p><strong>Result:</strong> Two agents, two approaches, zero interference. Compare results, merge the winner.</p>
+<p>Or run three agents on three different issues while keeping <code>main</code> pristine for urgent hotfixes. Your throughput just tripled.</p>
+<h2>The One-Liner Workflow</h2>
+<pre><code class="language-bash"># Create worktree for task
+wt() { git worktree add ../&quot;$(basename &quot;$PWD&quot;)-$1&quot; -b &quot;$1&quot;; }
+
+# Usage
+wt fix/auth-bug      # Creates ../myapp-fix/auth-bug with branch fix/auth-bug
+wt feat/api-v2       # Creates ../myapp-feat/api-v2 with branch feat/api-v2
+
+# Clean up when done
+git worktree remove ../&quot;$(basename &quot;$PWD&quot;)-fix/auth-bug&quot;
+</code></pre>
+<p>Add to <code>.bashrc</code> or <code>.zshrc</code>.</p>
+<h2>Summary</h2>
+<p>Git worktrees are like tmux for your repository. Same history, parallel sessions, instant switching.</p>
+<p><strong>Core insight:</strong> Branches are for managing code history. Worktrees are for managing <strong>your attention</strong>.</p>
+<p>Stop paying the context-switching tax. Start thinking in parallel.</p>
+<hr>
+<h2>Further Reading</h2>
+<ul>
+<li><a href="https://git-scm.com/docs/git-worktree">Official Git Worktree Docs</a></li>
+<li><a href="https://code.visualstudio.com/updates/v1_103#_git-worktree-support">VS Code Git Worktree Support</a> (added July 2025)</li>
+<li><a href="https://gist.github.com/ashwch/946ad983977c9107db7ee9abafeb95bd">Git Worktrees with Submodules</a></li>
+</ul>
+<p><strong>Tags:</strong> git, productivity, agentic-systems, parallel-development, workflow</p>
+<p><strong>Word count:</strong> ~1,500</p>
+
+</body>
+</html>
