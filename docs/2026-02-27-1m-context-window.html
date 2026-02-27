@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The 1M Token Context Window: What It Actually Unlocks (and What It Doesn't)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>The 1M Token Context Window: What It Actually Unlocks (and What It Doesn&#39;t)</h1>
+<p>On February 5, 2026, Claude Opus 4.6 shipped with a 1-million-token context window. That&#39;s 5× larger than the previous 200K limit, and roughly equivalent to 2,500 pages of text. The reactions fell into two camps: hype (&quot;This changes everything!&quot;) and skepticism (&quot;Why do I need that? I barely use 8K.&quot;).</p>
+<p>Both miss the point.</p>
+<p>A 1M context window doesn&#39;t mean &quot;now you can paste an entire book.&quot; It means <strong>architectural patterns that were impossible at 200K suddenly become trivial</strong>. The shift isn&#39;t incremental—it&#39;s categorical. If you&#39;re building agentic systems, understanding what this unlocks (and what it doesn&#39;t) is the difference between 2025 architecture and 2026 architecture.</p>
+<p>This is the practical breakdown. No hype, no benchmarks. Just the design patterns that work at 1M tokens, the ones that don&#39;t, and when to use each.</p>
+<h2>The Core Unlock: From Context Windows to Institutional Memory</h2>
+<p>Here&#39;s what changed between Claude Opus 4.5 (200K) and Claude Opus 4.6 (1M):</p>
+<h3>Before: Context Rot at Scale</h3>
+<p><strong>200K token workflow:</strong></p>
+<pre><code>User: &quot;Analyze this 50-page proposal&quot;
+Agent: [Loads doc] ✓ 40K tokens used
+
+User: &quot;Compare it to last year&#39;s proposal&quot;
+Agent: [Loads second doc] ✓ 80K tokens total
+
+User: &quot;What does our style guide say about proposals?&quot;
+Agent: [Loads style guide] ✓ 85K tokens total
+
+User: &quot;Check this against our legal requirements&quot;
+Agent: ✗ Context limit reached
+       &quot;I can only hold ~3 documents at once.
+        Please tell me which to remove.&quot;
+</code></pre>
+<p>At 200K, you&#39;re constantly playing Tetris with context. Load one doc, drop another. Every query requires deciding <em>what to forget</em>.</p>
+<h3>After: Full Corpus Context</h3>
+<p><strong>1M token workflow:</strong></p>
+<pre><code>Agent initialization:
+[Loads entire proposal library]
+- Current proposal (40K tokens)
+- Past 5 years of proposals (200K tokens)
+- Company style guide (15K tokens)
+- Legal requirements (30K tokens)
+- Competitive analysis (50K tokens)
+- Board feedback on proposals (100K tokens)
+Total: 435K tokens. Fits comfortably in 1M window.
+
+User: &quot;Analyze this proposal&quot;
+Agent: ✓ Full analysis with cross-references
+       &quot;Section 3 contradicts your 2024 Q2 proposal
+        (specifically page 8, which board rejected).
+        Legal requires disclosure on page 5 (see
+        compliance doc section 4.2). Style guide
+        recommends tables over prose for financials
+        (guide page 12).&quot;
+
+User: &quot;How does this compare to competitors?&quot;
+Agent: ✓ Already has competitive analysis loaded
+       &quot;Your pricing undercuts Acme by 15% (see
+        Acme analysis p.22) but matches Beta Corp
+        (Beta analysis p.9). Risk: commoditization.&quot;
+</code></pre>
+<p>The agent isn&#39;t just &quot;answering questions.&quot; It&#39;s <strong>cross-referencing across your entire institutional knowledge</strong> without losing anything.</p>
+<p>This is the unlock. Not &quot;bigger documents,&quot; but &quot;no more context amnesia.&quot;</p>
+<h2>What You Can Actually Fit in 1M Tokens</h2>
+<p>Concrete numbers matter. Here&#39;s what 1M tokens looks like in practice:</p>
+<h3>Text Documents</h3>
+<ul>
+<li><strong>~750,000 words</strong> (assume 1.3 tokens/word average)</li>
+<li><strong>~2,500 pages</strong> (300 words/page standard)</li>
+<li>Examples:<ul>
+<li>Entire Harry Potter series: ~1.08M words ✗ (too big by ~10%)</li>
+<li>War and Peace: ~587K words ✓</li>
+<li>Average corporate knowledge base: ~500K-800K words ✓</li>
+</ul>
+</li>
+</ul>
+<h3>Code Repositories</h3>
+<ul>
+<li><strong>~500K lines of code</strong> (assume 2 tokens/line for typical languages)</li>
+<li>Examples:<ul>
+<li>Rails codebase: ~300K LOC ✓</li>
+<li>Linux kernel: ~28M LOC ✗ (way too big)</li>
+<li>Typical SaaS app (200K LOC) + docs (100 pages) ✓</li>
+</ul>
+</li>
+</ul>
+<h3>Structured Data</h3>
+<ul>
+<li><strong>~50MB of JSON</strong> (compressed representation, heavily dependent on structure)</li>
+<li><strong>~100K rows</strong> of CSV data (10 columns, typical values)</li>
+<li>Database dumps: Small to medium databases (not &quot;big data&quot;)</li>
+</ul>
+<h3>Conversations</h3>
+<ul>
+<li><strong>~5,000 message turns</strong> (averaging 200 tokens/message pair)</li>
+<li>Slack channel history: ~6-12 months of active channel ✓</li>
+<li>Customer support tickets: ~1,000 full ticket threads ✓</li>
+</ul>
+<h3>Key Insight: Mixed Media</h3>
+<p>The killer use case isn&#39;t &quot;one giant document.&quot; It&#39;s <strong>everything you need for a task, all at once</strong>:</p>
+<pre><code>Project context (1M tokens total):
+├─ Codebase: 300K tokens
+├─ API docs: 50K tokens
+├─ User research: 100K tokens
+├─ Design specs: 80K tokens
+├─ Past sprint retrospectives: 70K tokens
+├─ Bug reports: 150K tokens
+├─ Performance benchmarks: 50K tokens
+└─ Competitive analysis: 200K tokens
+
+Total: 1M tokens of *relevant* context
+</code></pre>
+<p>The agent can now answer &quot;Should we use GraphQL or REST for this feature?&quot; by cross-referencing your API patterns, user needs, performance data, and competitor choices. All without asking you to upload anything mid-conversation.</p>
+<h2>Architecture Pattern 1: Full Codebase Context</h2>
+<p>The most obvious win for developers.</p>
+<h3>Old Pattern: RAG + Vector Search</h3>
+<pre><code class="language-python"># 2025 architecture (200K limit)
+
+# 1. Embed entire codebase
+embeddings = embed_codebase(&quot;./src&quot;)  # 500K LOC → vector DB
+
+# 2. User query
+query = &quot;Where is authentication handled?&quot;
+
+# 3. Semantic search for relevant files
+relevant_files = vector_search(query, embeddings, top_k=10)
+
+# 4. Load those files into context
+context = load_files(relevant_files)  # ~50K tokens
+
+# 5. Send to model
+response = claude.query(context + query)
+</code></pre>
+<p><strong>Pros</strong>: Works at any scale<br><strong>Cons</strong>:</p>
+<ul>
+<li>Might miss the right file (semantic search isn&#39;t perfect)</li>
+<li>No cross-file reasoning (&quot;How does auth interact with billing?&quot;)</li>
+<li>Requires maintaining embedding pipeline</li>
+<li>Cold start on every query (re-search, re-load)</li>
+</ul>
+<h3>New Pattern: Load Everything</h3>
+<pre><code class="language-python"># 2026 architecture (1M limit)
+
+# 1. Load entire codebase once
+codebase = load_all_files(&quot;./src&quot;)  # 500K LOC → 400K tokens
+
+# 2. Initialize agent with full context
+agent = claude.create_agent(context=codebase)
+
+# 3. User query (no search needed)
+query = &quot;Where is authentication handled?&quot;
+
+# 4. Model has full codebase, can grep internally
+response = agent.query(query)
+# Agent: &quot;auth/oauth.py lines 45-120 handles OAuth2.
+#         auth/session.py lines 30-90 manages sessions.
+#         middleware/auth.py line 15 applies to all routes.&quot;
+
+# 5. Follow-up works immediately (no re-loading)
+query2 = &quot;How does that interact with billing?&quot;
+response2 = agent.query(query2)
+# Agent: &quot;billing/stripe.py line 67 checks session.user_id
+#         before charging (see auth/session.py line 82).&quot;
+</code></pre>
+<p><strong>Pros</strong>:</p>
+<ul>
+<li>Perfect recall (model sees every file)</li>
+<li>Cross-file reasoning works</li>
+<li>No embeddings, no vector DB, no search pipeline</li>
+<li>Instant follow-ups (context persists)</li>
+</ul>
+<p><strong>Cons</strong>:</p>
+<ul>
+<li>Only works if codebase fits in 1M tokens</li>
+<li>Higher per-query cost (processing 400K tokens each time)</li>
+<li>Slower first response (~10-30s for full codebase ingestion)</li>
+</ul>
+<h3>When to Use Each</h3>
+<table>
+<thead>
+<tr>
+<th>Use Case</th>
+<th>Pattern</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Small codebase (&lt;500K LOC)</td>
+<td>Full context</td>
+<td>Fits in 1M, perfect recall</td>
+</tr>
+<tr>
+<td>Large codebase (&gt;500K LOC)</td>
+<td>RAG + vector</td>
+<td>Won&#39;t fit, need retrieval</td>
+</tr>
+<tr>
+<td>Code review (single PR)</td>
+<td>Full context</td>
+<td>Load base + PR changes</td>
+</tr>
+<tr>
+<td>Exploratory analysis</td>
+<td>Full context</td>
+<td>Unknown query space</td>
+</tr>
+<tr>
+<td>Repeated known queries</td>
+<td>RAG</td>
+<td>Cache embeddings, faster</td>
+</tr>
+</tbody></table>
+<p><strong>The rule of thumb</strong>: If it fits in 1M tokens and you need multi-step analysis, load everything. Otherwise, RAG.</p>
+<h2>Architecture Pattern 2: Multi-Document Synthesis</h2>
+<p>The second major unlock: cross-referencing at scale.</p>
+<h3>Use Case: M&amp;A Due Diligence</h3>
+<p>You&#39;re analyzing an acquisition target. Old workflow:</p>
+<pre><code>Human reads:
+- Financial statements (200 pages)
+- Legal contracts (300 pages)
+- Customer agreements (150 pages)
+- Employee contracts (100 pages)
+- IP filings (50 pages)
+
+Time required: ~40 hours
+Coverage: 80% (humans miss details)
+</code></pre>
+<p>New workflow with 1M context:</p>
+<pre><code class="language-python"># Load all documents
+docs = [
+    load_pdf(&quot;financials.pdf&quot;),      # 100K tokens
+    load_pdf(&quot;legal-contracts.pdf&quot;), # 180K tokens
+    load_pdf(&quot;customer-agreements.pdf&quot;), # 90K tokens
+    load_pdf(&quot;employee-contracts.pdf&quot;), # 60K tokens
+    load_pdf(&quot;ip-filings.pdf&quot;)       # 30K tokens
+]
+total_tokens = sum(len(d) for d in docs)  # 460K tokens
+
+# Initialize agent
+agent = claude.create_agent(context=docs)
+
+# Run structured analysis
+report = agent.query(&quot;&quot;&quot;
+Perform M&amp;A due diligence analysis:
+
+1. Financial Health
+   - Revenue trends (last 3 years)
+   - Debt obligations
+   - Customer concentration risk
+
+2. Legal Risks
+   - Ongoing litigation
+   - Contract breach exposure
+   - Regulatory compliance gaps
+
+3. IP Ownership
+   - Patents/trademarks owned vs licensed
+   - Employee IP assignment status
+   - Open source license violations
+
+4. Customer Risk
+   - Top 10 customer contract terms
+   - Churn clauses
+   - Renewal dates clustering
+
+Cross-reference all findings. Flag contradictions.
+Cite specific pages for each claim.
+&quot;&quot;&quot;)
+
+# Time required: ~10 minutes
+# Coverage: 95%+ (model reads every word)
+</code></pre>
+<p>The model doesn&#39;t just summarize each document separately. It <strong>cross-references</strong>:</p>
+<pre><code>Finding: Revenue shows 30% growth (financials p.12),
+but top customer contract expires in 60 days (customer
+agreements p.45) and represents 40% of revenue
+(financials p.8). High churn risk not disclosed in
+financial summary (financials p.3).
+
+Contradiction: CEO employment contract guarantees
+$2M severance (employee contracts p.23), but balance
+sheet shows only $500K in severance reserves
+(financials p.67). Potential balance sheet misstatement.
+</code></pre>
+<p>This is <strong>beyond human performance</strong> at scale. A human might catch the revenue/customer risk correlation. They won&#39;t catch the CEO contract/balance sheet discrepancy without hours of cross-checking.</p>
+<h2>Architecture Pattern 3: Persistent Context Across Sessions</h2>
+<p>The third unlock: session continuity.</p>
+<h3>The Problem: Agent Amnesia</h3>
+<p>Old multi-session workflow:</p>
+<pre><code>Session 1:
+User: &quot;Analyze this codebase&quot;
+Agent: [Loads 50K tokens] &quot;Here&#39;s my analysis...&quot;
+
+Session 2 (next day):
+User: &quot;Where was that auth bug you mentioned?&quot;
+Agent: ✗ &quot;I don&#39;t have access to our previous conversation.
+       Please re-upload the codebase.&quot;
+</code></pre>
+<p>Every session started from zero. Agents were glorified goldfish.</p>
+<h3>The Solution: Context Persistence</h3>
+<p>With 1M tokens, you can store <strong>the entire conversation history + all loaded documents</strong>:</p>
+<pre><code class="language-python">class PersistentAgent:
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.context = self.load_context()
+    
+    def load_context(self):
+        # Load from database
+        ctx = db.get(f&quot;agent_context:{self.user_id}&quot;)
+        
+        return {
+            &quot;documents&quot;: ctx[&quot;documents&quot;],      # 400K tokens
+            &quot;conversation_history&quot;: ctx[&quot;history&quot;], # 200K tokens
+            &quot;tool_results&quot;: ctx[&quot;tools&quot;],       # 50K tokens
+            &quot;total_tokens&quot;: 650K
+        }
+    
+    def query(self, message):
+        # Add to conversation history
+        self.context[&quot;conversation_history&quot;].append({
+            &quot;role&quot;: &quot;user&quot;,
+            &quot;content&quot;: message
+        })
+        
+        # Send full context to model
+        response = claude.messages.create(
+            model=&quot;claude-opus-4-6&quot;,
+            context=self.context[&quot;documents&quot;],
+            messages=self.context[&quot;conversation_history&quot;]
+        )
+        
+        # Save updated context
+        self.context[&quot;conversation_history&quot;].append({
+            &quot;role&quot;: &quot;assistant&quot;,
+            &quot;content&quot;: response.content
+        })
+        
+        db.set(f&quot;agent_context:{self.user_id}&quot;, self.context)
+        
+        return response
+</code></pre>
+<p>Now the agent &quot;remembers&quot; everything:</p>
+<pre><code>Session 1 (Monday):
+User: &quot;Analyze this codebase&quot;
+Agent: [Loads 400K tokens]
+       &quot;Found potential auth bug in oauth.py line 67...&quot;
+
+Session 2 (Wednesday):
+User: &quot;Fix that auth bug&quot;
+Agent: [Context already loaded]
+       &quot;Analyzing oauth.py line 67 from Monday&#39;s finding...
+        Here&#39;s the patch: ...&quot;
+
+Session 3 (Friday):
+User: &quot;Did we already fix the auth bug?&quot;
+Agent: [Remembers session 2]
+       &quot;Yes, applied patch on Wednesday (see session 2).
+        Would you like me to verify it&#39;s deployed?&quot;
+</code></pre>
+<p>The agent has <strong>true continuity</strong>. Not &quot;chat history,&quot; but full working memory across weeks.</p>
+<h3>The Trade-Off: Cost vs Continuity</h3>
+<p>Each query with 650K tokens of context costs ~$3.25 (at $5/M input tokens). That&#39;s 65× more expensive than an 8K context query.</p>
+<p><strong>When it&#39;s worth it:</strong></p>
+<ul>
+<li>High-value workflows (M&amp;A analysis, security audits)</li>
+<li>Long-running projects (codebase refactors, research)</li>
+<li>Executive assistants (context = your entire business)</li>
+</ul>
+<p><strong>When it&#39;s not:</strong></p>
+<ul>
+<li>One-off queries (&quot;What&#39;s the weather?&quot;)</li>
+<li>Stateless tasks (translation, summarization)</li>
+<li>High-volume, low-value requests</li>
+</ul>
+<p>Design your system to <strong>selectively load context</strong>. Not every query needs the full 1M.</p>
+<h2>What the 1M Context Window Does NOT Fix</h2>
+<p>Let&#39;s be clear about limitations:</p>
+<h3>1. Context Rot Still Exists (Just Delayed)</h3>
+<p>Models degrade on &quot;needle in haystack&quot; tasks as context grows. At 1M tokens:</p>
+<ul>
+<li><strong>Precision drops</strong> for specific detail retrieval</li>
+<li><strong>Latency increases</strong> (~30-60s for first query)</li>
+<li><strong>Hallucination risk</strong> grows (model might confabulate from partial matches)</li>
+</ul>
+<p><strong>Mitigation</strong>: Use structured context:</p>
+<pre><code class="language-python"># Bad: Dump everything as one blob
+context = &quot;\n\n&quot;.join(all_documents)
+
+# Good: Structure with headers
+context = f&quot;&quot;&quot;
+# Financial Documents
+{financials}
+
+# Legal Contracts
+{contracts}
+
+# Customer Data
+{customers}
+&quot;&quot;&quot;
+
+# Best: Use XML tags for clarity
+context = f&quot;&quot;&quot;
+&lt;financials&gt;
+{financials}
+&lt;/financials&gt;
+
+&lt;contracts&gt;
+{contracts}
+&lt;/contracts&gt;
+
+&lt;customers&gt;
+{customers}
+&lt;/customers&gt;
+&quot;&quot;&quot;
+</code></pre>
+<p>The model uses structure to navigate. &quot;Check the <financials> section&quot; is faster than &quot;search all text for financial info.&quot;</p>
+<h3>2. Not a Replacement for Databases</h3>
+<p>A 1M context window is <strong>working memory</strong>, not <strong>long-term storage</strong>.</p>
+<pre><code class="language-python"># Anti-pattern: Use context as database
+context = load_all_customer_records()  # 10M customers → won&#39;t fit
+
+query = &quot;Find all customers in California&quot;
+# ✗ This will fail or be extremely slow
+
+# Correct pattern: Database query + context
+california_customers = db.query(
+    &quot;SELECT * FROM customers WHERE state=&#39;CA&#39; LIMIT 1000&quot;
+)
+context = format_as_context(california_customers)
+
+agent = claude.create_agent(context=context)
+query = &quot;Analyze California customer cohort&quot;
+# ✓ This works: small result set in context
+</code></pre>
+<p><strong>Rule</strong>: Databases for filtering, context for analysis.</p>
+<h3>3. Not Magic for Instruction Following</h3>
+<p>A common misconception: &quot;1M context = better instruction following.&quot;</p>
+<p>Reality: Context size doesn&#39;t improve instruction quality. A poorly written prompt at 1M tokens is still poorly written.</p>
+<pre><code class="language-python"># This doesn&#39;t improve at 1M:
+prompt = &quot;Do the thing with the stuff&quot;
+# Model is still confused, regardless of context size
+
+# This works at any context size:
+prompt = &quot;&quot;&quot;
+Analyze the financial documents in &lt;financials&gt;.
+
+Output format:
+1. Revenue trend (YoY % change, last 3 years)
+2. Top 3 risk factors (cite page numbers)
+3. Recommendation (BUY/HOLD/PASS with reasoning)
+&quot;&quot;&quot;
+# Clear instructions work at 8K or 1M
+</code></pre>
+<p><strong>Lesson</strong>: More context enables more analysis. It doesn&#39;t fix bad prompts.</p>
+<h2>Practical Cost Management</h2>
+<p>1M contexts aren&#39;t cheap. Here&#39;s how to manage costs:</p>
+<h3>Technique 1: Prompt Caching</h3>
+<p>Claude caches context between requests:</p>
+<pre><code class="language-python"># First request: Pay for full 400K tokens ($2.00)
+response1 = claude.query(codebase + &quot;Where is auth?&quot;)
+
+# Second request: Cache hit on codebase, only pay for new query
+response2 = claude.query(codebase + &quot;Where is billing?&quot;)
+# Cost: $0.05 (only the new query, codebase is cached)
+</code></pre>
+<p><strong>Savings</strong>: Up to 90% on repeat queries with same context.</p>
+<h3>Technique 2: Lazy Loading</h3>
+<p>Don&#39;t load everything upfront. Load on demand:</p>
+<pre><code class="language-python">class LazyAgent:
+    def __init__(self):
+        self.context = {}
+    
+    def query(self, message):
+        # Detect needed context from query
+        if &quot;auth&quot; in message and &quot;auth&quot; not in self.context:
+            self.context[&quot;auth&quot;] = load_files(&quot;auth/&quot;)
+        
+        if &quot;billing&quot; in message and &quot;billing&quot; not in self.context:
+            self.context[&quot;billing&quot;] = load_files(&quot;billing/&quot;)
+        
+        # Only send what&#39;s needed
+        relevant_context = {k: v for k, v in self.context.items()
+                            if keyword_match(k, message)}
+        
+        return claude.query(relevant_context + message)
+</code></pre>
+<p><strong>Savings</strong>: 50-80% by only loading relevant subsections.</p>
+<h3>Technique 3: Context Summaries</h3>
+<p>For very long projects, periodically summarize and drop old details:</p>
+<pre><code class="language-python"># After 50 turns (context bloat):
+if len(conversation_history) &gt; 50:
+    # Summarize old turns
+    summary = claude.query(f&quot;&quot;&quot;
+    Summarize this conversation history in 5K tokens:
+    {conversation_history[:30]}
+    
+    Preserve: Key decisions, open issues, important context
+    Drop: Resolved issues, redundant discussion
+    &quot;&quot;&quot;)
+    
+    # Replace old history with summary
+    conversation_history = [summary] + conversation_history[30:]
+</code></pre>
+<p><strong>Savings</strong>: Keeps context fresh, prevents runaway token growth.</p>
+<h2>The Decision Framework: When to Use 1M Context</h2>
+<pre><code>                    Use 1M Context?
+                          │
+                          ▼
+         ┌────────────────┴────────────────┐
+         │ Does it fit in 1M tokens?       │
+         └────────┬────────────────┬───────┘
+                  │                │
+               YES│                │NO
+                  ▼                ▼
+      ┌─────────────────┐   Use RAG/Vector Search
+      │ Multi-step      │   or Database Queries
+      │ analysis needed?│
+      └────┬────────┬───┘
+           │        │
+        YES│        │NO
+           ▼        ▼
+    Use Full    Use Targeted
+    Context     Context (8K-32K)
+                (cheaper, faster)
+</code></pre>
+<p><strong>Examples:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Pattern</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Code review (single PR)</td>
+<td>Full context</td>
+<td>Base + changes fit, need cross-file checks</td>
+</tr>
+<tr>
+<td>Search codebase</td>
+<td>RAG</td>
+<td>Might be huge, targeted queries</td>
+</tr>
+<tr>
+<td>M&amp;A due diligence</td>
+<td>Full context</td>
+<td>Cross-reference critical, fits in 1M</td>
+</tr>
+<tr>
+<td>Customer support</td>
+<td>Targeted</td>
+<td>Load single ticket + KB articles</td>
+</tr>
+<tr>
+<td>Research synthesis</td>
+<td>Full context</td>
+<td>10-20 papers, deep analysis needed</td>
+</tr>
+<tr>
+<td>Translation</td>
+<td>Targeted</td>
+<td>Stateless, no context needed</td>
+</tr>
+</tbody></table>
+<h2>Key Takeaways for Builders</h2>
+<ol>
+<li><p><strong>1M contexts enable new architectures</strong>, not just bigger documents. Design for cross-referencing, not single-file analysis.</p>
+</li>
+<li><p><strong>Load everything that fits.</strong> Stop rationing context at 200K. If your project fits in 1M, load it all.</p>
+</li>
+<li><p><strong>Structure your context.</strong> Use XML tags, headers, sections. The model navigates faster with signposts.</p>
+</li>
+<li><p><strong>Cache aggressively.</strong> Prompt caching saves 90% on repeat queries. Design for cache hits.</p>
+</li>
+<li><p><strong>Lazy load when possible.</strong> Not every query needs full context. Load sections on demand.</p>
+</li>
+<li><p><strong>Summarize long sessions.</strong> Don&#39;t let conversation history bloat indefinitely. Compress old turns.</p>
+</li>
+<li><p><strong>Cost-benefit matters.</strong> $3/query is fine for M&amp;A analysis. It&#39;s not fine for &quot;What&#39;s 2+2?&quot;</p>
+</li>
+<li><p><strong>RAG isn&#39;t dead.</strong> For codebases &gt;1M tokens or open-ended search, vector retrieval still wins.</p>
+</li>
+<li><p><strong>Context ≠ database.</strong> Use SQL for filtering, context for analysis. Don&#39;t replace Postgres with a prompt.</p>
+</li>
+<li><p><strong>Test retrieval quality.</strong> At 500K+ tokens, benchmark &quot;needle in haystack&quot; performance. Context rot is real.</p>
+</li>
+</ol>
+<h2>The Bottom Line</h2>
+<p>The 1M context window is the first time <strong>working memory matches human institutional knowledge</strong>. A senior engineer &quot;holds&quot; their entire codebase in memory. A CFO &quot;holds&quot; the company&#39;s financials. An M&amp;A partner &quot;holds&quot; deal terms across 50 transactions.</p>
+<p>Now your agent can too.</p>
+<p>This isn&#39;t about replacing databases or vector search. It&#39;s about <strong>eliminating the context juggling</strong> that plagued every multi-step agentic workflow. Load the project, keep it loaded, cross-reference freely.</p>
+<p>The architectural shift: from &quot;what fits in 8K?&quot; to &quot;what fits in 1M?&quot; unlocks tasks that were impossible at smaller scales. Use it wisely. Cache aggressively. Structure clearly. And stop designing around context amnesia.</p>
+<p>The models remember now. Build accordingly.</p>
+<hr>
+<p><strong>Further Reading:</strong></p>
+<ul>
+<li>Claude API docs on context windows: <a href="https://platform.claude.com/docs/context-windows">https://platform.claude.com/docs/context-windows</a></li>
+<li>&quot;Effective Context Engineering for AI Agents&quot; (Anthropic, 2026)</li>
+<li>Pricing analysis: <a href="https://claude.com/pricing">https://claude.com/pricing</a></li>
+<li>Context rot benchmarks: MRCR, GraphWalks research papers</li>
+</ul>
+
+</body>
+</html>
