@@ -11,7 +11,7 @@ fi
 
 MARKDOWN_FILE="$1"
 TITLE="$2"
-TAGS="${3:-sparky-research}"
+TAGS="${3:-sparky}"
 NOTES="${4:-}"
 
 if [ ! -f "$MARKDOWN_FILE" ]; then
@@ -33,11 +33,31 @@ git commit -m "Add: $TITLE"
 echo "Pushing to GitHub..."
 git push origin main
 
-# Wait a moment for GitHub to process
-sleep 2
+# Wait for GitHub Pages to build and deploy (typically 30-60 seconds)
+HTML_URL="https://jrellegood.github.io/sparky-research/$HTML_BASENAME"
+echo "Waiting for GitHub Pages to deploy $HTML_URL..."
+echo "(This usually takes 30-60 seconds)"
+
+# Wait and verify deployment
+MAX_ATTEMPTS=60
+ATTEMPT=0
+while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HTML_URL")
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo " ✓ Page is live!"
+        break
+    fi
+    echo -n "."
+    sleep 1
+    ATTEMPT=$((ATTEMPT + 1))
+done
+
+if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+    echo ""
+    echo "Warning: Timed out waiting for GitHub Pages. Proceeding anyway..."
+fi
 
 # Send to Readwise (GitHub Pages URL)
-HTML_URL="https://jrellegood.github.io/sparky-research/$HTML_BASENAME"
 echo "Sending to Readwise: $HTML_URL"
 
 curl -X POST https://readwise.io/api/v3/save/ \
