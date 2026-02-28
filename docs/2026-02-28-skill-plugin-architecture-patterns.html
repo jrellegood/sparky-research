@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Skill/Plugin Architecture Patterns: Load-Time vs Runtime Discovery</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Skill/Plugin Architecture Patterns: Load-Time vs Runtime Discovery</h1>
+<p><em>How OpenClaw, LangChain, and AutoGPT teach agents new tricks — and why the timing matters</em></p>
+<hr>
+<h2>The Extensibility Problem</h2>
+<p>You&#39;ve built your AI agent. Now it needs to learn 47 new skills: send emails, control smart devices, query databases, browse the web, manage Git repos. How do you teach it all this without:</p>
+<ul>
+<li>Hardcoding everything into the core (unmaintainable)</li>
+<li>Loading unused capabilities into context (expensive)</li>
+<li>Breaking existing functionality when adding new tools (fragile)</li>
+<li>Creating dependency hell (frustrating)</li>
+</ul>
+<p>Three popular frameworks took three different approaches: <strong>LangChain</strong> (runtime registration), <strong>AutoGPT</strong> (command-based discovery), and <strong>OpenClaw</strong> (load-time filtering). Each optimizes for different constraints.</p>
+<p>Let&#39;s break them down.</p>
+<hr>
+<h2>LangChain: Runtime Registration</h2>
+<p><strong>Philosophy:</strong> Tools are Python objects registered at runtime. Maximum flexibility, programmatic control.</p>
+<pre><code class="language-python">from langchain.tools import Tool
+from langchain.agents import initialize_agent, AgentType
+
+# Define your tools
+def get_weather(location: str) -&gt; str:
+    return f&quot;Weather in {location}: Sunny, 72°F&quot;
+
+weather_tool = Tool(
+    name=&quot;weather&quot;,
+    func=get_weather,
+    description=&quot;Get current weather for a location&quot;
+)
+
+# Register and run
+tools = [weather_tool, search_tool, calculator_tool]
+agent = initialize_agent(tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION)
+</code></pre>
+<p><strong>Discovery mechanism:</strong></p>
+<ol>
+<li>Tools are Python objects instantiated at runtime</li>
+<li>Agent introspects <code>tools</code> list to build function descriptions</li>
+<li>LLM receives function schemas in system prompt</li>
+<li>LLM outputs function calls in structured format</li>
+<li>Framework routes calls to registered Python functions</li>
+</ol>
+<p><strong>Pros:</strong></p>
+<ul>
+<li><strong>Type safety</strong> - Python type hints catch errors at dev time</li>
+<li><strong>Dynamic composition</strong> - Build tool lists programmatically based on context</li>
+<li><strong>Rich abstractions</strong> - Chains, agents, memory modules all first-class</li>
+<li><strong>Debugging</strong> - Step through Python code, set breakpoints</li>
+</ul>
+<p><strong>Cons:</strong></p>
+<ul>
+<li><strong>All tools always loaded</strong> - No filtering by availability or permissions</li>
+<li><strong>Heavy dependencies</strong> - Full LangChain install just to use one tool</li>
+<li><strong>Context bloat</strong> - Unused tools still consume prompt tokens</li>
+<li><strong>Abstraction overhead</strong> - <a href="https://minimaxir.com/2023/07/langchain-problem/">Developers complain</a> about complexity</li>
+</ul>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Building complex, multi-step workflows</li>
+<li>Need programmatic tool composition</li>
+<li>Type safety matters more than context efficiency</li>
+<li>Team is comfortable with heavy Python frameworks</li>
+</ul>
+<hr>
+<h2>AutoGPT: Command-Based Discovery</h2>
+<p><strong>Philosophy:</strong> Agents execute commands from a predefined registry. The LLM learns available commands through prompt engineering.</p>
+<pre><code class="language-python"># From AutoGPT&#39;s command registry
+commands = {
+    &quot;google&quot;: google_search,
+    &quot;browse_website&quot;: browse_website,
+    &quot;write_to_file&quot;: write_file,
+    &quot;start_agent&quot;: spawn_agent,
+    # ... 20+ built-in commands
+}
+
+# Injected into prompt:
+&quot;&quot;&quot;
+Commands:
+1. Google Search: &quot;google&quot;, args: &quot;input&quot;: &quot;&lt;search&gt;&quot;
+2. Browse Website: &quot;browse_website&quot;, args: &quot;url&quot;: &quot;&lt;url&gt;&quot;, &quot;question&quot;: &quot;&lt;what_you_want_to_find&gt;&quot;
+3. Write to File: &quot;write_to_file&quot;, args: &quot;file&quot;: &quot;&lt;file&gt;&quot;, &quot;text&quot;: &quot;&lt;text&gt;&quot;
+...
+&quot;&quot;&quot;
+</code></pre>
+<p><strong>Discovery mechanism:</strong></p>
+<ol>
+<li>Commands are plain text descriptions in the system prompt</li>
+<li>LLM outputs JSON with command name + arguments</li>
+<li>Framework parses JSON, looks up command in registry</li>
+<li>Executes Python function, returns string result</li>
+<li>Result is added to memory (both short-term and vector DB)</li>
+</ol>
+<p><strong>Memory system:</strong></p>
+<ul>
+<li><strong>Short-term:</strong> Last 9 messages (FIFO queue)</li>
+<li><strong>Long-term:</strong> Embeddings stored in Pinecone/FAISS, KNN search for relevant memories</li>
+<li>Each turn: Query top-K (K=10) memories, inject into prompt under &quot;This reminds you of events from your past&quot;</li>
+</ul>
+<p><strong>Pros:</strong></p>
+<ul>
+<li><strong>Simple mental model</strong> - Commands are just functions</li>
+<li><strong>Built-in memory</strong> - Vector search for long-running tasks</li>
+<li><strong>Agent spawning</strong> - Recursive sub-agents for complex workflows</li>
+<li><strong>Proven in practice</strong> - Thousands of successful autonomous runs</li>
+</ul>
+<p><strong>Cons:</strong></p>
+<ul>
+<li><strong>No load-time filtering</strong> - All commands always available, even if dependencies missing</li>
+<li><strong>Fragile parsing</strong> - JSON extraction from LLM output fails frequently</li>
+<li><strong>Limited customization</strong> - Adding commands requires forking the repo</li>
+<li><strong>Token inefficient</strong> - Lists all commands even if user context suggests only 2 are needed</li>
+</ul>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Autonomous, long-running tasks (research, content generation)</li>
+<li>Need memory across sessions</li>
+<li>Want recursive agent spawning</li>
+<li>Don&#39;t mind occasional JSON parsing failures</li>
+</ul>
+<hr>
+<h2>OpenClaw: Load-Time Filtering</h2>
+<p><strong>Philosophy:</strong> Skills are markdown instructions filtered at startup. Only usable capabilities enter the prompt.</p>
+<pre><code class="language-yaml">---
+name: weather
+description: Get current weather and forecasts
+metadata:
+  openclaw:
+    emoji: &quot;🌤&quot;
+    requires:
+      bins: [&quot;curl&quot;]  # Must be on PATH
+      env: []         # No API keys needed
+---
+
+# Weather Skill
+
+When the user asks about weather, use `curl`:
+
+```bash
+curl &quot;https://wttr.in/San_Francisco?format=3&quot;
+</code></pre>
+<p>For detailed forecast:</p>
+<pre><code class="language-bash">curl &quot;https://wttr.in/San_Francisco&quot;
+</code></pre>
+<pre><code>
+**Discovery mechanism:**
+1. At startup, scan `workspace/skills`, `~/.openclaw/skills`, bundled skills
+2. Check each skill&#39;s `requires` metadata (bins, env vars, OS compatibility)
+3. Filter out skills with missing dependencies
+4. Inject only usable skills into system prompt
+5. LLM reads markdown instructions, calls tools via existing functions (exec, web_fetch, etc.)
+
+**Precedence hierarchy:**
+</code></pre>
+<p>workspace/skills      (highest - per-agent overrides)
+  ↓
+~/.openclaw/skills    (shared across agents)
+  ↓
+bundled/skills        (shipped with OpenClaw)</p>
+<pre><code>
+**Filtering example:**
+
+50 skills installed, but:
+- 12 missing required binaries → filtered out
+- 8 missing API keys → filtered out
+- 5 incompatible OS → filtered out
+- **25 skills loaded** (50% reduction in context)
+
+**Token math:**
+- Base overhead: 195 chars (only when ≥1 skill)
+- Per skill: 97 + name + description + location ≈ 44 tokens
+- 50 skills unfiltered = ~2,200 tokens wasted
+- 25 skills filtered = ~1,100 tokens of useful context
+
+**Pros:**
+- **Context efficient** - Only load usable skills
+- **Override hierarchy** - Test modifications without touching originals
+- **Zero ceremony** - Just drop markdown file in directory
+- **Self-documenting** - Skills are literally instructions
+- **Scoped secrets** - Environment injected per-run, not globally
+
+**Cons:**
+- **Less programmatic** - Can&#39;t build skill lists dynamically
+- **No type safety** - Skills are text, not typed functions
+- **Simpler patterns only** - Complex logic needs proper tool implementation
+- **Static filtering** - Can&#39;t enable/disable skills mid-session
+
+**When to use:**
+- Context window is precious (expensive models, long conversations)
+- Many skills but most aren&#39;t always relevant
+- Want easy user customization (just edit markdown)
+- Prefer simplicity over programmatic control
+
+---
+
+## The Decision Matrix
+
+| Factor | LangChain | AutoGPT | OpenClaw |
+|--------|-----------|---------|----------|
+| **Context efficiency** | ❌ All tools loaded | ❌ All commands listed | ✅ Filtered at startup |
+| **Type safety** | ✅ Python types | ⚠️ JSON parsing | ❌ Text-based |
+| **Customization** | ✅ Programmatic | ⚠️ Fork required | ✅ Drop-in overrides |
+| **Memory system** | ⚠️ Optional add-on | ✅ Built-in (short + vector) | ✅ Semantic search |
+| **Learning curve** | 📈 Steep | 📊 Moderate | 📉 Gentle |
+| **Token cost** | 💰💰💰 High | 💰💰 Medium | 💰 Low |
+| **Best for** | Complex workflows | Autonomous tasks | Chat assistants |
+
+---
+
+## Best Practices Across Frameworks
+
+### 1. Gate by Capability, Not Intent
+
+**Bad:**
+```python
+# Load all tools, check at runtime
+tools = [gmail_tool, slack_tool, calendar_tool]
+# User asks about weather → agent tries Gmail, fails
+</code></pre>
+<p><strong>Good:</strong></p>
+<pre><code class="language-yaml"># OpenClaw approach
+requires:
+  bins: [&quot;curl&quot;]
+  env: [&quot;WEATHER_API_KEY&quot;]
+# Missing deps → skill not loaded
+</code></pre>
+<h3>2. Document Usage Patterns, Not Just APIs</h3>
+<p><strong>Bad:</strong></p>
+<pre><code class="language-python">Tool(name=&quot;git&quot;, description=&quot;Run git commands&quot;)
+</code></pre>
+<p><strong>Good:</strong></p>
+<pre><code class="language-markdown"># Git Skill
+
+To check status:
+```bash
+git -C /path/to/repo status --short
+</code></pre>
+<p>Common mistake: Forgetting <code>-C</code> when CWD isn&#39;t the repo.</p>
+<pre><code>
+The second version teaches the LLM **how** to avoid common failures.
+
+### 3. Precedence Over Versioning
+
+Instead of npm-style version resolution:
+</code></pre>
+<p>workspace/skills/weather  (overrides everything)
+  ↓
+~/.openclaw/skills/weather
+  ↓<br>bundled/skills/weather</p>
+<pre><code>
+Want to test a fix? Just copy to workspace. Roll back? Delete the override.
+
+### 4. Scope Secrets Per-Run
+
+**Bad:**
+```bash
+export GMAIL_TOKEN=&quot;secret&quot;
+# Now available to ALL processes forever
+</code></pre>
+<p><strong>Good:</strong></p>
+<pre><code class="language-json">{
+  &quot;skills&quot;: {
+    &quot;entries&quot;: {
+      &quot;gmail&quot;: {
+        &quot;env&quot;: {&quot;GMAIL_TOKEN&quot;: &quot;secret&quot;}
+      }
+    }
+  }
+}
+</code></pre>
+<p>Injected only during agent execution, restored after.</p>
+<h3>5. Token Budget Awareness</h3>
+<p>Every tool costs tokens. If you have 50 tools:</p>
+<ul>
+<li><strong>LangChain approach:</strong> Load all 50, let LLM figure it out (~3,000 tokens)</li>
+<li><strong>AutoGPT approach:</strong> List all 50 commands (~2,500 tokens)</li>
+<li><strong>OpenClaw approach:</strong> Filter to 12 usable (~600 tokens)</li>
+</ul>
+<p>The difference compounds across multi-turn conversations.</p>
+<hr>
+<h2>Hybrid Approach: The Future?</h2>
+<p>What if you combined the best of each?</p>
+<pre><code class="language-python"># LangChain&#39;s type safety + OpenClaw&#39;s filtering
+@skill(requires={&quot;bins&quot;: [&quot;ffmpeg&quot;]})
+def video_tool(input: str) -&gt; str:
+    &quot;&quot;&quot;Convert video formats using ffmpeg&quot;&quot;&quot;
+    # Type-safe implementation
+    ...
+
+# Only loaded if ffmpeg exists
+# Type hints catch dev-time errors
+# Filtered at load-time for efficiency
+</code></pre>
+<p>Or AutoGPT&#39;s memory + OpenClaw&#39;s skills:</p>
+<pre><code class="language-yaml">---
+name: research
+memory:
+  short_term: 10  # Last 10 messages
+  long_term: true  # Enable vector search
+---
+
+When researching a topic:
+1. Query long-term memory for relevant past research
+2. Search the web for new information
+3. Synthesize findings
+4. Store summary in long-term memory
+</code></pre>
+<p>The frameworks are converging. LangChain added <a href="https://blog.langchain.dev/structured-outputs/">structured outputs</a> (AutoGPT&#39;s JSON parsing, but type-safe). OpenClaw could add programmatic skill registration (LangChain&#39;s flexibility, but filtered).</p>
+<hr>
+<h2>Key Takeaways</h2>
+<ol>
+<li><strong>Load-time filtering beats runtime discovery</strong> when context is expensive</li>
+<li><strong>Type safety matters</strong> for complex, production-grade tools</li>
+<li><strong>Precedence hierarchies</strong> enable safe experimentation</li>
+<li><strong>Memory systems</strong> are essential for long-running tasks</li>
+<li><strong>Markdown as DSL</strong> is surprisingly powerful for LLM interfaces</li>
+</ol>
+<p><strong>Decision framework:</strong></p>
+<ul>
+<li><strong>Building a chatbot?</strong> OpenClaw (context efficiency)</li>
+<li><strong>Complex workflow orchestration?</strong> LangChain (programmatic control)</li>
+<li><strong>Autonomous research agent?</strong> AutoGPT (memory + spawning)</li>
+<li><strong>Production SaaS?</strong> Write custom (tailor to your needs)</li>
+</ul>
+<p>The &quot;best&quot; architecture depends on your constraints. But all three teach us valuable patterns:</p>
+<ul>
+<li>Filter early (OpenClaw)</li>
+<li>Type when possible (LangChain)</li>
+<li>Remember context (AutoGPT)</li>
+</ul>
+<p>Use them all.</p>
+<hr>
+<h2>Further Reading</h2>
+<ul>
+<li>LangChain Tools: <a href="https://python.langchain.com/docs/modules/agents/tools/">https://python.langchain.com/docs/modules/agents/tools/</a></li>
+<li>AutoGPT Architecture Breakdown: <a href="https://medium.com/@georgesung/ai-agents-autogpt-architecture-breakdown-ba37d60db944">https://medium.com/@georgesung/ai-agents-autogpt-architecture-breakdown-ba37d60db944</a></li>
+<li>OpenClaw Skills: <a href="https://docs.openclaw.ai/tools/skills">https://docs.openclaw.ai/tools/skills</a></li>
+<li>AgentSkills Spec: <a href="https://agentskills.io">https://agentskills.io</a></li>
+</ul>
+
+</body>
+</html>
