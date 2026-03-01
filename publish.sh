@@ -34,7 +34,8 @@ echo "Pushing to GitHub..."
 git push origin main
 
 # Wait for GitHub Pages to build and deploy (typically 30-60 seconds)
-HTML_URL="https://jrellegood.github.io/sparky-research/$HTML_BASENAME"
+# Use custom domain (github.io redirects to it)
+HTML_URL="https://jrellegood.com/sparky-research/$HTML_BASENAME"
 echo "Waiting for GitHub Pages to deploy $HTML_URL..."
 echo "(This usually takes 30-60 seconds)"
 
