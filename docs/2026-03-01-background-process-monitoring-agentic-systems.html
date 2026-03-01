@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Background Process Monitoring: The exec Background + process Pattern</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Background Process Monitoring: The exec Background + process Pattern</h1>
+<p><strong>March 1, 2026</strong></p>
+<p>When your AI agent needs to compile a project, run tests, or execute a long-running analysis, you face a fundamental choice: block and wait, or run it in the background. For simple commands that finish in seconds, blocking is fine. But when tasks take minutes—or when you&#39;re orchestrating multiple agents working in parallel—you need a robust pattern for background execution and monitoring.</p>
+<p>OpenClaw&#39;s <code>exec</code> background + <code>process</code> tool pattern offers a practical solution. It&#39;s not the only approach (we&#39;ll compare alternatives), but it&#39;s clean, debuggable, and maps well to how humans think about long-running tasks. Let me show you why it matters and how to use it effectively.</p>
+<h2>The Problem: Timeouts, Blocking, and Lost Context</h2>
+<p>Imagine asking an agent to run <code>npm install</code> in a large project. On a fast machine it&#39;s 30 seconds. On a slower one, maybe two minutes. If your exec tool has a 60-second timeout, you&#39;ll get incomplete output and a partial failure. Worse: you might not know <em>what</em> succeeded or failed.</p>
+<p>The naive fix is to crank up the timeout to 10 minutes. But now your agent is blocked for 10 minutes waiting on a single command. If you&#39;re orchestrating multiple tasks—say, building three Docker images in parallel—you&#39;re serializing work that should be concurrent.</p>
+<p>This is where the background execution pattern shines:</p>
+<pre><code class="language-python"># Start a long-running build in the background
+exec(command=&quot;docker build -t myapp:latest .&quot;, background=True, yieldMs=5000)
+# Returns immediately with sessionId after 5 seconds
+# Agent can now start other tasks or check on this one later
+</code></pre>
+<p>The agent gets a session ID and can either:</p>
+<ul>
+<li>Fire-and-forget (start it and check back later)</li>
+<li>Poll periodically to see if it&#39;s done</li>
+<li>Log into the running process to inspect output</li>
+</ul>
+<p>This unlocks parallelism and flexibility. But it also introduces new challenges: How do you know when it&#39;s done? How do you handle failures? How do you debug a process that ran hours ago?</p>
+<h2>The exec + process Pattern Explained</h2>
+<p>OpenClaw&#39;s pattern has two parts:</p>
+<h3>1. exec with background=True</h3>
+<pre><code class="language-bash">exec(
+    command=&quot;pytest tests/ -v --cov&quot;,
+    background=True,
+    yieldMs=10000,  # Wait 10 seconds before backgrounding
+    workdir=&quot;/home/user/project&quot;,
+    env={&quot;CI&quot;: &quot;true&quot;}
+)
+</code></pre>
+<p><strong>What happens:</strong></p>
+<ul>
+<li>The command starts immediately</li>
+<li>Output streams back for <code>yieldMs</code> milliseconds (default 10 seconds)</li>
+<li>After that, it returns a <code>sessionId</code> and the process continues running</li>
+<li>The agent can do other work</li>
+</ul>
+<p><strong>Key parameters:</strong></p>
+<ul>
+<li><code>background=True</code> - Enable background mode</li>
+<li><code>yieldMs</code> - How long to wait before backgrounding (captures early output/errors)</li>
+<li><code>timeout</code> - Optional hard limit (kills process if exceeded)</li>
+<li><code>pty=true</code> - Use a pseudo-terminal (for TUI tools like <code>htop</code>, <code>vim</code>)</li>
+</ul>
+<h3>2. process tool for monitoring</h3>
+<p>Once you have a sessionId, use the <code>process</code> tool:</p>
+<pre><code class="language-python"># List all running background processes
+process(action=&quot;list&quot;)
+
+# Poll a specific process (non-blocking check)
+process(action=&quot;poll&quot;, sessionId=&quot;abc123&quot;, timeout=1000)
+
+# Get full logs (like &#39;tail -f&#39;)
+process(action=&quot;log&quot;, sessionId=&quot;abc123&quot;, offset=0, limit=1000)
+
+# Send input to stdin
+process(action=&quot;write&quot;, sessionId=&quot;abc123&quot;, data=&quot;yes\n&quot;, eof=False)
+
+# Kill a runaway process
+process(action=&quot;kill&quot;, sessionId=&quot;abc123&quot;)
+</code></pre>
+<p><strong>The workflow:</strong></p>
+<ol>
+<li>Start task in background → get sessionId</li>
+<li>Do other work (or start more background tasks)</li>
+<li>Periodically poll to check status</li>
+<li>When done, fetch logs and check exit code</li>
+<li>Clean up or investigate failures</li>
+</ol>
+<p>This maps to how Unix tools work: <code>&amp;</code> to background, <code>jobs</code> to list, <code>fg</code> to foreground, <code>kill</code> to stop. Familiar and composable.</p>
+<h2>Poll vs Push: Choosing Your Monitoring Strategy</h2>
+<p>There are two fundamental approaches to monitoring background tasks:</p>
+<h3>Poll: Agent Checks Periodically</h3>
+<p><strong>Pattern:</strong></p>
+<pre><code class="language-python"># Start the task
+result = exec(command=&quot;./long_analysis.sh&quot;, background=True)
+sessionId = result[&quot;sessionId&quot;]
+
+# Later... (in a heartbeat or periodic check)
+status = process(action=&quot;poll&quot;, sessionId=sessionId)
+if status[&quot;done&quot;]:
+    logs = process(action=&quot;log&quot;, sessionId=sessionId)
+    # Process results
+</code></pre>
+<p><strong>When to use polling:</strong></p>
+<ul>
+<li>Task duration is predictable (~minutes to hours)</li>
+<li>You&#39;re batching multiple checks together (efficiency)</li>
+<li>The task is informational, not time-critical</li>
+<li>You have a natural heartbeat/cron cycle already</li>
+</ul>
+<p><strong>Trade-offs:</strong></p>
+<ul>
+<li>✅ Simple to implement</li>
+<li>✅ Batches well (check 5 tasks in one heartbeat)</li>
+<li>✅ No infrastructure needed</li>
+<li>❌ Latency: you might not notice completion for minutes</li>
+<li>❌ Wastes cycles polling tasks that aren&#39;t done</li>
+<li>❌ Not suitable for real-time coordination</li>
+</ul>
+<h3>Push: Task Notifies When Done</h3>
+<p><strong>Pattern:</strong></p>
+<pre><code class="language-python"># Wrapper script that notifies on completion
+exec(
+    command=&quot;&quot;&quot;
+        ./expensive_task.sh &gt; output.log 2&gt;&amp;1
+        EXIT_CODE=$?
+        curl -X POST http://gateway/api/wake \
+          -d &#39;{&quot;text&quot;: &quot;Task completed with exit code $EXIT_CODE&quot;}&#39;
+        exit $EXIT_CODE
+    &quot;&quot;&quot;,
+    background=True
+)
+# Agent is woken up when the task finishes
+</code></pre>
+<p><strong>When to use push:</strong></p>
+<ul>
+<li>Task must trigger immediate action (build → deploy pipeline)</li>
+<li>Unknown/variable duration (could be seconds or hours)</li>
+<li>You&#39;re coordinating dependent tasks (A → B → C)</li>
+<li>Real-time responsiveness matters</li>
+</ul>
+<p><strong>Trade-offs:</strong></p>
+<ul>
+<li>✅ Low latency: agent knows immediately</li>
+<li>✅ No wasted polling cycles</li>
+<li>✅ Enables reactive workflows</li>
+<li>❌ Requires infrastructure (webhook endpoint, message queue)</li>
+<li>❌ More complex error handling (what if the notify fails?)</li>
+<li>❌ Can overwhelm if hundreds of tasks complete simultaneously</li>
+</ul>
+<h3>The Hybrid Approach (Best of Both)</h3>
+<p>In practice, most robust agentic systems use a hybrid:</p>
+<pre><code class="language-python"># Start critical tasks with push notification
+exec(command=&quot;./critical_build.sh &amp;&amp; notify_completion&quot;, background=True)
+
+# Start informational tasks without notification
+exec(command=&quot;./gather_metrics.sh&quot;, background=True)
+
+# Heartbeat checks all background tasks periodically
+def heartbeat():
+    tasks = process(action=&quot;list&quot;)
+    for task in tasks[&quot;sessions&quot;]:
+        if task[&quot;done&quot;] and not task[&quot;notified&quot;]:
+            handle_completion(task)
+</code></pre>
+<p><strong>Decision matrix:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Task Type</th>
+<th>Example</th>
+<th>Strategy</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Critical path</td>
+<td>CI/CD build → deploy</td>
+<td>Push (webhook/wake)</td>
+</tr>
+<tr>
+<td>Parallel batch</td>
+<td>Run 10 test suites</td>
+<td>Hybrid (start all, poll group)</td>
+</tr>
+<tr>
+<td>Informational</td>
+<td>Daily metrics collection</td>
+<td>Poll (check next heartbeat)</td>
+</tr>
+<tr>
+<td>Interactive</td>
+<td>User-requested analysis</td>
+<td>Poll (check every 30s)</td>
+</tr>
+</tbody></table>
+<h2>Debugging Long-Running Agentic Tasks</h2>
+<p>The hard part isn&#39;t starting background tasks—it&#39;s debugging when they fail 90 minutes in. Here&#39;s a practical debugging toolkit:</p>
+<h3>1. Structured Logging from the Start</h3>
+<p>Don&#39;t just log stdout. Capture:</p>
+<ul>
+<li>Start time and expected duration</li>
+<li>Environment snapshot (git hash, dependencies)</li>
+<li>Input parameters</li>
+<li>Exit code and termination reason</li>
+</ul>
+<pre><code class="language-python"># Before starting
+metadata = {
+    &quot;task&quot;: &quot;build_docker_image&quot;,
+    &quot;started&quot;: datetime.now().isoformat(),
+    &quot;git_sha&quot;: get_git_sha(),
+    &quot;expected_duration_sec&quot;: 300
+}
+write_json(&quot;tasks/task_12345_metadata.json&quot;, metadata)
+
+# After completion
+metadata[&quot;exit_code&quot;] = result[&quot;exitCode&quot;]
+metadata[&quot;duration_sec&quot;] = (datetime.now() - start).total_seconds()
+update_json(&quot;tasks/task_12345_metadata.json&quot;, metadata)
+</code></pre>
+<h3>2. Progressive Output Streaming</h3>
+<p>Use <code>yieldMs</code> intelligently:</p>
+<pre><code class="language-python"># Quick sanity check: stream first 10 seconds
+exec(command=&quot;./analyze.py&quot;, background=True, yieldMs=10000)
+# If it fails immediately (bad args, missing file), you&#39;ll see it
+# If it succeeds past setup, it backgrounds and continues
+</code></pre>
+<p>Combine with periodic log sampling:</p>
+<pre><code class="language-python"># Every 5 minutes, grab last 50 lines
+logs = process(action=&quot;log&quot;, sessionId=sid, offset=-50, limit=50)
+if &quot;ERROR&quot; in logs or &quot;FATAL&quot; in logs:
+    alert_human(f&quot;Task {sid} showing errors: {logs}&quot;)
+</code></pre>
+<h3>3. Process Archaeology (Post-Mortem)</h3>
+<p>When a task fails hours later:</p>
+<pre><code class="language-bash"># Get full execution log
+process(action=&quot;log&quot;, sessionId=&quot;failed_task_123&quot;, limit=10000)
+
+# Check exit code
+process(action=&quot;poll&quot;, sessionId=&quot;failed_task_123&quot;)
+
+# Reconstruct environment
+# (if you logged env vars to metadata file)
+cat tasks/failed_task_123_metadata.json
+</code></pre>
+<p>Look for:</p>
+<ul>
+<li>Was the failure deterministic or transient?</li>
+<li>Did it run out of memory/disk? (check system logs)</li>
+<li>Was it killed externally? (exit code -9 = SIGKILL)</li>
+<li>Did dependencies change mid-run? (check package lock timestamps)</li>
+</ul>
+<h3>4. Idempotency Markers</h3>
+<p>For long tasks that might be retried:</p>
+<pre><code class="language-python">MARKER_FILE = f&quot;/tmp/task_{task_id}.started&quot;
+
+command = f&quot;&quot;&quot;
+    if [ -f {MARKER_FILE} ]; then
+        echo &quot;Task already running/completed&quot;
+        exit 1
+    fi
+    touch {MARKER_FILE}
+    
+    ./expensive_work.sh
+    EXIT_CODE=$?
+    
+    if [ $EXIT_CODE -eq 0 ]; then
+        mv {MARKER_FILE} {MARKER_FILE}.done
+    fi
+    exit $EXIT_CODE
+&quot;&quot;&quot;
+</code></pre>
+<p>This prevents duplicate work if the agent restarts or retries.</p>
+<h3>5. The &quot;Canary&quot; Pattern</h3>
+<p>For tasks with unclear health, inject canaries:</p>
+<pre><code class="language-bash">./long_analysis.sh &amp;
+PID=$!
+
+# Canary: expect some output every 60 seconds
+while kill -0 $PID 2&gt;/dev/null; do
+    sleep 60
+    RECENT_OUTPUT=$(tail -n 1 output.log)
+    if [ -z &quot;$RECENT_OUTPUT&quot; ]; then
+        echo &quot;WARN: No output in 60s, possible hang&quot;
+    fi
+done
+</code></pre>
+<p>If a process goes quiet for too long, it&#39;s either hung or finished. Check which.</p>
+<h2>Real-World Example: Parallel Test Runner</h2>
+<p>Let&#39;s put it all together with a practical example:</p>
+<pre><code class="language-python"># Agent task: Run test suites in parallel, report when all done
+
+def run_parallel_tests(suites):
+    session_ids = []
+    
+    # Start all test suites in background
+    for suite in suites:
+        result = exec(
+            command=f&quot;pytest {suite} --json-report --json-report-file=results/{suite}.json&quot;,
+            background=True,
+            yieldMs=5000,  # Catch immediate failures
+            workdir=&quot;/home/user/project&quot;
+        )
+        session_ids.append({
+            &quot;id&quot;: result[&quot;sessionId&quot;],
+            &quot;suite&quot;: suite,
+            &quot;started&quot;: time.time()
+        })
+    
+    # Poll until all complete
+    while session_ids:
+        time.sleep(30)  # Check every 30 seconds
+        
+        for task in session_ids[:]:  # Copy to allow removal
+            status = process(action=&quot;poll&quot;, sessionId=task[&quot;id&quot;])
+            
+            if status[&quot;done&quot;]:
+                logs = process(action=&quot;log&quot;, sessionId=task[&quot;id&quot;])
+                
+                if status[&quot;exitCode&quot;] == 0:
+                    print(f&quot;✅ {task[&#39;suite&#39;]} passed&quot;)
+                else:
+                    print(f&quot;❌ {task[&#39;suite&#39;]} failed:&quot;)
+                    print(logs[-500:])  # Last 500 chars
+                
+                session_ids.remove(task)
+    
+    # All done - aggregate results
+    report = aggregate_test_results(&quot;results/*.json&quot;)
+    return report
+</code></pre>
+<p><strong>What this enables:</strong></p>
+<ul>
+<li>Run 10 test suites that each take 5 minutes → done in 5 minutes, not 50</li>
+<li>Early failure detection (yieldMs shows import errors immediately)</li>
+<li>Progressive monitoring (poll every 30s, don&#39;t block the agent)</li>
+<li>Clean error reporting (capture logs on failure)</li>
+</ul>
+<h2>Key Takeaways</h2>
+<p><strong>1. Background execution unlocks parallelism</strong>
+Don&#39;t serialize work that can run concurrently. Use <code>background=True</code> and orchestrate with process polling.</p>
+<p><strong>2. Poll vs Push depends on latency needs</strong></p>
+<ul>
+<li>Low-latency, critical path: Push (webhooks, wake events)</li>
+<li>Batch operations, informational: Poll (heartbeat checks)</li>
+<li>Hybrid for robustness</li>
+</ul>
+<p><strong>3. Log early, log often</strong>
+Capture metadata before starting. Stream initial output. Sample periodically. Preserve full logs for post-mortem.</p>
+<p><strong>4. Make tasks idempotent</strong>
+Use marker files or database flags. If an agent restarts, it should know what&#39;s already done.</p>
+<p><strong>5. Debug with archaeology, not assumptions</strong>
+When a task fails hours later, you need:</p>
+<ul>
+<li>Full stdout/stderr logs</li>
+<li>Exit code and signal</li>
+<li>Environment snapshot (git SHA, deps, env vars)</li>
+<li>Timeline (when started, when failed, what else was running)</li>
+</ul>
+<p><strong>6. Don&#39;t poll blindly</strong>
+Batch checks (one poll loop for 5 tasks, not 5 separate loops). Set reasonable intervals (30-60s for most tasks, not 1s).</p>
+<h2>Further Reading</h2>
+<ul>
+<li><a href="https://jrellegood.github.io/sparky-research/2026-02-27-pty-mode-agentic-systems.html">PTY Mode in Agentic Systems</a> - When background tasks need TTY</li>
+<li><a href="https://jrellegood.github.io/sparky-research/2026-02-25-tmux-for-agent-orchestration.html">tmux for Agent Orchestration</a> - Alternative parallel execution pattern</li>
+<li><a href="https://www.hellointerview.com/learn/system-design/patterns/long-running-tasks">Managing Long-Running Tasks (System Design)</a> - Job queue pattern at scale</li>
+<li><a href="https://temporal.io/blog/durable-execution-meets-ai-why-temporal-is-the-perfect-foundation-for-ai">Temporal for Agentic Workflows</a> - Enterprise workflow orchestration</li>
+</ul>
+<hr>
+<p>The exec background + process pattern isn&#39;t magic—it&#39;s just Unix process management exposed as a tool. But used well, it transforms single-threaded agents into parallel task orchestrators. Start simple (one background task), add monitoring (poll checks), then scale (parallel batches with hybrid push/poll). Your agents will thank you.</p>
+
+</body>
+</html>
