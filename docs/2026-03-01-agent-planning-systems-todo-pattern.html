@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Planning Systems: The To-Do List Pattern</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Agent Planning Systems: The To-Do List Pattern</h1>
+<p>The most common failure mode in multi-step AI agents isn&#39;t hallucination. It isn&#39;t capability. It&#39;s <strong>forgetting what they&#39;re supposed to be doing halfway through</strong>.</p>
+<p>You ask the agent to do three things. It starts on the first one, goes deep, produces great work... and then calls it done. The other two tasks? Forgotten. Buried under pages of tool output and intermediate results.</p>
+<p>Junior engineers do this too. So do I, sometimes. But when you&#39;re building production agents, you can&#39;t just shrug and say &quot;well, attention is hard.&quot; You need a systematic solution.</p>
+<p>The answer, it turns out, is embarrassingly simple: <strong>make the agent write a to-do list</strong>.</p>
+<p>Not as a polite suggestion in the prompt. As a <strong>first-class tool call</strong>—a structured object the system can inspect, enforce, and re-inject into context on every turn.</p>
+<p>This is the pattern that keeps agents on task, and it&#39;s showing up everywhere: in Cursor, in Claude Code, and in Alex (the AI assistant built by Arise AI that inspired this article).</p>
+<h2>The Problem: Attention Drift</h2>
+<p>Here&#39;s what happens in a typical multi-step agent execution:</p>
+<ol>
+<li>User asks: &quot;Summarize the last three agent traces, compare their performance, and identify the slowest operation.&quot;</li>
+<li>Agent starts: &quot;I&#39;ll fetch the first trace...&quot;</li>
+<li>Agent fetches trace → 50KB of JSON in context</li>
+<li>Agent analyzes trace → more output</li>
+<li>Agent writes summary → even more output</li>
+<li>Agent calls &quot;finish&quot; → done!</li>
+</ol>
+<p>Wait. What about the other two traces? What about the comparison? What about finding the slowest operation?</p>
+<p><strong>The agent forgot.</strong></p>
+<p>The original request is still in the conversation history, but it&#39;s buried under pages of tool results. By turn 6, the agent&#39;s attention is entirely focused on the immediate context—the trace it just analyzed—and the broader plan has faded into irrelevance.</p>
+<p>This isn&#39;t a hallucination. The model didn&#39;t make things up. It just <strong>lost track of the plan</strong>.</p>
+<h2>The Solution: First-Class Planning Tools</h2>
+<p>The fix is to make planning a <strong>structured, enforceable step</strong> before any work begins.</p>
+<p>Here&#39;s how Alex does it:</p>
+<pre><code class="language-python"># Before the agent can fetch data or analyze anything,
+# it must call to-do write to create a plan
+
+def todo_write(tasks: List[str]) -&gt; dict:
+    &quot;&quot;&quot;
+    Create a task plan. Must be called before performing work.
+    Returns a plan ID that persists for the session.
+    &quot;&quot;&quot;
+    plan = {
+        &quot;id&quot;: generate_plan_id(),
+        &quot;tasks&quot;: [
+            {&quot;id&quot;: i, &quot;description&quot;: task, &quot;status&quot;: &quot;pending&quot;}
+            for i, task in enumerate(tasks)
+        ]
+    }
+    
+    # Store outside conversation history (on disk or in session state)
+    save_plan(plan)
+    
+    return {
+        &quot;plan_id&quot;: plan[&quot;id&quot;],
+        &quot;message&quot;: &quot;Plan created. Begin with the first pending task.&quot;
+    }
+</code></pre>
+<p>The agent doesn&#39;t just think about planning—it <strong>executes a plan creation step</strong> that produces a durable artifact.</p>
+<h2>Three Planning Tools</h2>
+<p>A complete planning system needs three operations:</p>
+<h3>1. <code>todo_write</code> - Create the Plan</h3>
+<p>Called once at the start. Takes a list of task descriptions, returns a plan ID.</p>
+<p>Example:</p>
+<pre><code class="language-json">{
+  &quot;tool&quot;: &quot;todo_write&quot;,
+  &quot;tasks&quot;: [
+    &quot;Fetch and summarize trace A&quot;,
+    &quot;Fetch and summarize trace B&quot;, 
+    &quot;Fetch and summarize trace C&quot;,
+    &quot;Compare performance metrics&quot;,
+    &quot;Identify slowest operation&quot;
+  ]
+}
+</code></pre>
+<h3>2. <code>todo_update</code> - Mark Progress</h3>
+<p>Called as work proceeds. Updates task status.</p>
+<p>Example:</p>
+<pre><code class="language-json">{
+  &quot;tool&quot;: &quot;todo_update&quot;,
+  &quot;task_id&quot;: 0,
+  &quot;status&quot;: &quot;completed&quot;
+}
+</code></pre>
+<h3>3. <code>todo_read</code> - Check Current State</h3>
+<p>Called when the agent needs to see where it is in the plan.</p>
+<p>Returns:</p>
+<pre><code class="language-json">{
+  &quot;pending&quot;: [&quot;Fetch and summarize trace B&quot;, &quot;...&quot;],
+  &quot;in_progress&quot;: [&quot;Fetch and summarize trace C&quot;],
+  &quot;completed&quot;: [&quot;Fetch and summarize trace A&quot;],
+  &quot;blocked&quot;: []
+}
+</code></pre>
+<h2>The Four Statuses</h2>
+<p>Early versions of planning systems often use just two states: <strong>pending</strong> and <strong>completed</strong>.</p>
+<p>This doesn&#39;t work.</p>
+<p>With only two states, the agent knows what it hasn&#39;t started and what it&#39;s finished, but it has <strong>no working pointer</strong>. It doesn&#39;t know which of the pending tasks it&#39;s currently in the middle of.</p>
+<p>That&#39;s why most production planning systems use <strong>four statuses</strong>:</p>
+<h3>1. <code>pending</code> - Not Started</h3>
+<p>Tasks waiting to begin.</p>
+<h3>2. <code>in_progress</code> - Current Task</h3>
+<p><strong>The single task the agent is actively working on right now.</strong></p>
+<p>This is the working pointer. At any given time, exactly one task should be in progress (or zero if between tasks).</p>
+<h3>3. <code>completed</code> - Finished</h3>
+<p>Tasks that are done.</p>
+<h3>4. <code>blocked</code> - Waiting for Human</h3>
+<p>Tasks that can&#39;t proceed without human input.</p>
+<p>Example: &quot;I found three possible bottlenecks. Which one should I focus on?&quot;</p>
+<p>The <code>blocked</code> status provides an escape hatch—if the agent genuinely can&#39;t proceed, it can mark a task as blocked, explain why, and pause for human input.</p>
+<h2>The Highest Leverage Change: <code>in_progress</code></h2>
+<p>According to the Arise AI team, adding the <code>in_progress</code> status was <strong>&quot;one of the highest leveraged changes we made.&quot;</strong></p>
+<p>Why?</p>
+<p>Because it gives the agent a concrete anchor. No matter how deep into tool calls and JSON parsing it gets, the plan always shows:</p>
+<p><strong>&quot;You are currently working on: Fetch and summarize trace C&quot;</strong></p>
+<p>This is your cognitive anchor in a sea of intermediate results.</p>
+<h2>Where the Plan Lives: Not in History</h2>
+<p>Here&#39;s the critical architectural decision:</p>
+<p><strong>The plan does not live in the conversation history.</strong></p>
+<p>If you store the plan as just another message in the chat, it gets buried the same way the original user request does. It scrolls up. It gets truncated when context limits hit. It becomes noise.</p>
+<p>Instead, the plan lives <strong>outside the conversation</strong>, stored in:</p>
+<ul>
+<li>Session state (in-memory)</li>
+<li>Disk (a JSON file)</li>
+<li>Database (for multi-session agents)</li>
+</ul>
+<p>And on <strong>every single LLM call</strong>, the plan is <strong>dynamically re-injected</strong> into the context window.</p>
+<h2>The Plan Message: Always Visible</h2>
+<p>Here&#39;s what the agent sees on every turn:</p>
+<pre><code># Current Plan
+
+## Tasks
+- [✓] Fetch and summarize trace A
+- [✓] Fetch and summarize trace B  
+- [→] Fetch and summarize trace C (IN PROGRESS)
+- [ ] Compare performance metrics
+- [ ] Identify slowest operation
+
+## Next Steps
+You are currently working on: &quot;Fetch and summarize trace C&quot;
+
+When this task is complete, call:
+  todo_update(task_id=2, status=&quot;completed&quot;)
+
+Then move to the next pending task.
+
+When ALL tasks are completed, call:
+  finish()
+</code></pre>
+<p>This message is placed <strong>right after the system prompt</strong>, before the messy tool call history.</p>
+<p>No matter how deep the agent gets—50 turns in, hundreds of KB of JSON—the plan is always right there, fresh and current.</p>
+<h2>The Finish Gate: Enforcing Completion</h2>
+<p>Prompts aren&#39;t enough to keep agents from finishing early. You need code enforcement.</p>
+<pre><code class="language-python">def finish(context) -&gt; dict:
+    &quot;&quot;&quot;
+    Agent calls this when it believes work is complete.
+    Enforces completion via code, not prompts.
+    &quot;&quot;&quot;
+    plan = load_plan(context.plan_id)
+    
+    incomplete = [
+        task for task in plan[&quot;tasks&quot;]
+        if task[&quot;status&quot;] in [&quot;pending&quot;, &quot;in_progress&quot;]
+    ]
+    
+    # Can&#39;t finish with incomplete tasks unless they&#39;re blocked
+    if incomplete:
+        blocked_only = all(t[&quot;status&quot;] == &quot;blocked&quot; for t in incomplete)
+        if not blocked_only:
+            return {
+                &quot;error&quot;: &quot;Cannot finish with incomplete tasks&quot;,
+                &quot;incomplete&quot;: [t[&quot;description&quot;] for t in incomplete],
+                &quot;instruction&quot;: &quot;Complete pending tasks or mark as blocked if you need human input&quot;
+            }
+    
+    # Only reaches here if all tasks are done or blocked
+    return {&quot;status&quot;: &quot;success&quot;}
+</code></pre>
+<p>The agent can <strong>try</strong> to finish early, but the system won&#39;t let it.</p>
+<p>This is a <strong>recoverable exception</strong>—not a crash, but a structured error that bounces the agent back into the work loop with guidance about what&#39;s still pending.</p>
+<h2>The Blocked Escape Hatch</h2>
+<p>Sometimes the agent genuinely can&#39;t proceed:</p>
+<ul>
+<li>&quot;Which of these three bottlenecks should I prioritize?&quot;</li>
+<li>&quot;This data appears corrupted. Should I skip it or wait for a fix?&quot;</li>
+<li>&quot;I need API credentials to proceed.&quot;</li>
+</ul>
+<p>For these cases, the agent can mark a task as <code>blocked</code>:</p>
+<pre><code class="language-python">todo_update(task_id=3, status=&quot;blocked&quot;, reason=&quot;Need user to choose priority&quot;)
+</code></pre>
+<p>The finish gate allows completion when <strong>all incomplete tasks are blocked</strong>:</p>
+<pre><code class="language-python">if all(task[&quot;status&quot;] in [&quot;completed&quot;, &quot;blocked&quot;] for task in plan[&quot;tasks&quot;]):
+    return {&quot;status&quot;: &quot;success&quot;}  # OK to finish
+</code></pre>
+<p>This prevents the agent from getting stuck in an unwinnable state while still enforcing that it can&#39;t skip work arbitrarily.</p>
+<h2>Real-World Example: 27 Calls in Circles</h2>
+<p>Here&#39;s a memorable failure case from early Alex development:</p>
+<p><strong>User request:</strong> &quot;Summarize several agent traces&quot;</p>
+<p><strong>What happened:</strong> The agent made <strong>27 LLM calls</strong>, almost all of them managing its internal to-do list in freeform text, going in circles, never actually fetching or analyzing data.</p>
+<p><strong>Why:</strong> No structured planning. The agent kept <em>thinking about what to do</em> but had no durable plan to anchor its actions.</p>
+<p><strong>Fix:</strong> First-class planning tools. The agent writes the plan once, then <strong>executes</strong> tasks instead of repeatedly re-planning.</p>
+<h2>Show, Don&#39;t Tell</h2>
+<p>Early versions of Alex included this in the system prompt:</p>
+<pre><code>Always use todo_write to plan your tasks before beginning work.
+</code></pre>
+<p>It didn&#39;t help.</p>
+<p>What worked was <strong>showing a concrete example</strong>:</p>
+<pre><code># Example Planning
+
+User request: &quot;Compare experiments A and B&quot;
+
+Step 1: Call todo_write with tasks:
+  1. Fetch experiment A data
+  2. Fetch experiment B data  
+  3. Compare accuracy scores
+  4. Compare latency metrics
+  5. Summarize findings
+
+Step 2: Execute tasks in order, updating status as you go
+
+Step 3: Call finish() when all tasks are completed
+</code></pre>
+<p>Abstract instructions do very little. Concrete examples work.</p>
+<h2>Patterns Across Systems</h2>
+<p>This isn&#39;t unique to Alex. You see variations of this pattern in:</p>
+<p><strong>Cursor:</strong></p>
+<ul>
+<li>Has a first-class &quot;to-do object&quot; for code edits</li>
+<li>Shows task list in the UI</li>
+<li>Tracks which files need changes</li>
+</ul>
+<p><strong>Claude Code / OpenCode:</strong></p>
+<ul>
+<li>Plans file operations before executing</li>
+<li>Shows user what it intends to do</li>
+<li>Executes plan step-by-step</li>
+</ul>
+<p><strong>Agent frameworks (LangChain, CrewAI, etc.):</strong></p>
+<ul>
+<li>Explicit planning phases</li>
+<li>Task decomposition tools</li>
+<li>Progress tracking</li>
+</ul>
+<p>The details vary, but the core pattern is the same: <strong>make planning a structured, durable, visible artifact</strong>.</p>
+<h2>Implementation Checklist</h2>
+<p>If you&#39;re building a multi-step agent, here&#39;s what a planning system needs:</p>
+<ul>
+<li><input disabled="" type="checkbox"> <strong>Three planning tools:</strong> write, update, read</li>
+<li><input disabled="" type="checkbox"> <strong>Four statuses:</strong> pending, in_progress, completed, blocked  </li>
+<li><input disabled="" type="checkbox"> <strong>Plan stored outside conversation history</strong> (disk/state/DB)</li>
+<li><input disabled="" type="checkbox"> <strong>Plan re-injected on every LLM call</strong> (after system prompt)</li>
+<li><input disabled="" type="checkbox"> <strong>Finish gate:</strong> Prevent premature completion via code</li>
+<li><input disabled="" type="checkbox"> <strong>Blocked escape hatch:</strong> Allow pause when human input needed</li>
+<li><input disabled="" type="checkbox"> <strong>Concrete examples in prompt:</strong> Show, don&#39;t tell</li>
+</ul>
+<h2>Code Over Prompts</h2>
+<p>The planning system works because it&#39;s <strong>enforced in code</strong>, not just suggested in prompts.</p>
+<ul>
+<li>The agent <em>must</em> call <code>todo_write</code> before doing work (or it has no plan to inject)</li>
+<li>The agent <em>can&#39;t</em> finish with incomplete tasks (the tool returns an error)</li>
+<li>The plan <em>always</em> appears in context (re-injection is automatic)</li>
+</ul>
+<p>This is the broader lesson: <strong>if you want agents to follow a rule, put the rule in code, not just the prompt.</strong></p>
+<p>Prompts are suggestions. Code is constraints.</p>
+<h2>Takeaway: Cognitive Anchors for Agents</h2>
+<p>Humans use to-do lists because our working memory is limited and distractions are constant. We write things down to offload cognitive load and maintain focus.</p>
+<p>Agents have the same problem, just with different constraints: context windows fill with JSON, attention drifts toward recent outputs, and the original goal fades into the background.</p>
+<p>The to-do list pattern solves this by providing a <strong>cognitive anchor</strong>—a durable, visible reminder of the plan that stays in focus no matter how deep the agent goes.</p>
+<p>It&#39;s simple. Almost embarrassingly so.</p>
+<p>But it works.</p>
+<hr>
+<h2>References</h2>
+<ul>
+<li>Laurie Voss, &quot;Building Production AI Agents&quot; (Arise AI, 2026)</li>
+<li>Alex: AI assistant for Arise AX observability platform</li>
+<li>Pattern variations in: Cursor, Claude Code, OpenCode, LangChain, CrewAI</li>
+</ul>
+<h2>Related Patterns</h2>
+<ul>
+<li><strong>Finish gate:</strong> Code-enforced completion rules</li>
+<li><strong>Recoverable exceptions:</strong> Structured errors that guide agents back on track</li>
+<li><strong>Context re-injection:</strong> Keeping critical info visible across turns</li>
+<li><strong>Small, sharp tools:</strong> Unix philosophy applied to agent tooling</li>
+</ul>
+<h2>Next Steps</h2>
+<p>If you&#39;re building an agent:</p>
+<ol>
+<li>Add planning tools <strong>before</strong> optimizing anything else</li>
+<li>Test on multi-step tasks (3+ operations)</li>
+<li>Watch for early finishes (common failure mode)</li>
+<li>Add the <code>in_progress</code> status if you haven&#39;t already</li>
+<li>Move the plan out of conversation history</li>
+</ol>
+<p>And remember: the plan is not decoration. It&#39;s the agent&#39;s working memory externalized into a structure the system can enforce.</p>
+
+</body>
+</html>

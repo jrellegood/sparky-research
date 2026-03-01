@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompts Are Suggestions. Code Is Constraints.</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Prompts Are Suggestions. Code Is Constraints.</h1>
+<p>If you&#39;re building AI agents for production, you&#39;ll eventually learn this lesson the hard way: <strong>prompts are suggestions, but code is constraints.</strong> No matter how carefully you craft your system prompt, no matter how many examples you provide, if you want an agent to reliably follow a rule in production, you need to enforce it in code.</p>
+<p>This isn&#39;t a criticism of LLMs. It&#39;s a fundamental property of probabilistic systems operating in complex environments. And once you internalize this principle, it changes how you architect agent systems.</p>
+<h2>The Illusion of Prompt Control</h2>
+<p>Here&#39;s a pattern every agent builder hits early on:</p>
+<p>Your agent keeps doing something wrong. Maybe it&#39;s calling a &quot;finish&quot; tool before completing all tasks. Maybe it&#39;s fetching too much data and overflowing context windows. Maybe it&#39;s skipping validation steps.</p>
+<p>Your first instinct? Add it to the prompt.</p>
+<pre><code>You MUST complete all tasks before calling finish.
+ALWAYS validate inputs before proceeding.
+NEVER fetch more than 100 rows at once.
+</code></pre>
+<p>You test it. It works! Ship it.</p>
+<p>Then in production, under different conditions, with different inputs, at different context depths... it does the wrong thing anyway.</p>
+<p>The problem isn&#39;t that the LLM &quot;didn&#39;t read&quot; your prompt. The problem is that prompts are weighted suggestions in a probabilistic decision-making process, not hard constraints.</p>
+<h2>What Actually Works: Tool-Based Enforcement</h2>
+<p>Laurie Voss, speaking about building Alex (an AI assistant at Arise AI), describes their solution to agents finishing tasks early:</p>
+<blockquote>
+<p>&quot;We have what we call the finish gate. If the agent tries to call our finish tool with incomplete to-dos, it gets an error. Not a suggestion, not a reminder—a recoverable exception that lists which tasks are unfinished and bounces the agent back into the work loop.&quot;</p>
+</blockquote>
+<p>This works because <strong>the constraint lives in code</strong>, not in the prompt. The agent can try to finish early, but the system won&#39;t let it.</p>
+<p>Here&#39;s what that looks like in practice:</p>
+<pre><code class="language-python">def finish_tool(context):
+    &quot;&quot;&quot;
+    Agent calls this when it believes the task is complete.
+    Enforces completion via code, not prompts.
+    &quot;&quot;&quot;
+    incomplete_tasks = [
+        task for task in context.tasks 
+        if task.status in [&quot;pending&quot;, &quot;in_progress&quot;]
+    ]
+    
+    # Hard constraint: can&#39;t finish with incomplete tasks
+    # unless explicitly blocked waiting for human input
+    if incomplete_tasks and not all(t.status == &quot;blocked&quot; for t in incomplete_tasks):
+        return {
+            &quot;error&quot;: &quot;Cannot finish with incomplete tasks&quot;,
+            &quot;incomplete&quot;: [task.description for task in incomplete_tasks],
+            &quot;instruction&quot;: &quot;Complete pending tasks or mark them as blocked if human input is needed&quot;
+        }
+    
+    # Only reaches here if all tasks are complete or blocked
+    return {&quot;status&quot;: &quot;success&quot;, &quot;message&quot;: &quot;Task completed&quot;}
+</code></pre>
+<p>The prompt can still say &quot;call finish when done,&quot; but the <strong>tool itself enforces the rule</strong>. The agent can&#39;t bypass it through creative interpretation or context-dependent attention drift.</p>
+<h2>Recoverable Exceptions: Guardrails That Teach</h2>
+<p>The &quot;finish gate&quot; demonstrates a powerful pattern: <strong>recoverable exceptions</strong>. These aren&#39;t hard failures that crash the agent. They&#39;re structured errors that:</p>
+<ol>
+<li><strong>Block the invalid action</strong> (won&#39;t let finish succeed)</li>
+<li><strong>Explain why it was blocked</strong> (incomplete tasks listed)</li>
+<li><strong>Suggest what to do instead</strong> (complete tasks or mark as blocked)</li>
+</ol>
+<p>This creates a feedback loop. The agent tries something, the tool guides it back on track, and the agent corrects course. Over time, the agent learns the constraints through interaction, not just through reading.</p>
+<p>Another example from the same talk: data fetching limits.</p>
+<p><strong>Old approach (prompt-based):</strong></p>
+<pre><code>Do not try to compare more than two experiments at a time.
+</code></pre>
+<p>This was a band-aid for context overflow. It didn&#39;t scale, and users were frustrated by artificial limits.</p>
+<p><strong>New approach (code-based):</strong></p>
+<pre><code class="language-python">def query_data(json_id, jq_expression, context):
+    &quot;&quot;&quot;
+    Query large JSON data with hard output limits.
+    Enforces budget in code, not prompts.
+    &quot;&quot;&quot;
+    result = execute_jq(json_id, jq_expression)
+    
+    # Hard 10k character budget
+    MAX_OUTPUT = 10_000
+    
+    if len(result) &gt; MAX_OUTPUT:
+        return {
+            &quot;error&quot;: &quot;Query returned too much data&quot;,
+            &quot;size&quot;: len(result),
+            &quot;max_allowed&quot;: MAX_OUTPUT,
+            &quot;suggestion&quot;: &quot;Refine your jq expression to return fewer fields or filter rows&quot;,
+            &quot;preview&quot;: result[:1000]  # Show sample of what matched
+        }
+    
+    return {&quot;data&quot;: result}
+</code></pre>
+<p>Now the agent can query as many experiments as needed, but each query has a predictable cost. The budget is <strong>enforced</strong>, not suggested. The two-experiment cap was removed entirely.</p>
+<h2>When Prompts Still Matter</h2>
+<p>This isn&#39;t an argument against prompts. Prompts are still critical for:</p>
+<ul>
+<li><strong>Defining goals and context</strong> (&quot;You help users debug AI agents&quot;)</li>
+<li><strong>Providing examples</strong> (show, don&#39;t tell—concrete demonstrations work)</li>
+<li><strong>Setting tone and style</strong> (&quot;Be concise and direct&quot;)</li>
+<li><strong>Offering strategies</strong> (&quot;When stuck, try narrowing your search&quot;)</li>
+</ul>
+<p>But when it comes to <strong>rules that must not be broken</strong>, code is your enforcement mechanism.</p>
+<p>Think of it this way:</p>
+<ul>
+<li><strong>Prompts</strong> = training and guidance</li>
+<li><strong>Code</strong> = guardrails and budgets</li>
+</ul>
+<h2>Patterns Worth Enforcing in Code</h2>
+<p>Based on production agent deployments, here are rules commonly moved from prompts to code:</p>
+<h3>1. Completion Gates</h3>
+<p>&quot;Don&#39;t finish until all tasks are done&quot; → tool returns error if incomplete tasks exist</p>
+<h3>2. Output Budgets</h3>
+<p>&quot;Don&#39;t return too much data&quot; → tool truncates or errors if output exceeds limit</p>
+<h3>3. Safety Constraints</h3>
+<p>&quot;Only read, don&#39;t write&quot; → wrapper scripts reject destructive commands</p>
+<p>Example from the debugging skills mentioned in the talk:</p>
+<pre><code class="language-bash"># Wrapper for kubectl that enforces read-only
+safe-kubectl() {
+    # Reject any mutating operations
+    if [[ &quot;$*&quot; =~ (apply|delete|patch|exec|create) ]]; then
+        echo &quot;ERROR: Destructive kubectl operations not allowed&quot;
+        return 1
+    fi
+    
+    kubectl &quot;$@&quot;
+}
+</code></pre>
+<p>The LLM can call <code>safe-kubectl</code>, but it <strong>cannot</strong> run destructive commands, no matter what the prompt says or what creative reasoning it employs.</p>
+<h3>4. Validation Rules</h3>
+<p>&quot;Check inputs before processing&quot; → tool validates and returns structured errors</p>
+<h3>5. Rate Limits</h3>
+<p>&quot;Don&#39;t call this API too frequently&quot; → tool enforces cooldown periods</p>
+<h2>The &quot;Blocked&quot; Escape Hatch</h2>
+<p>One subtle but critical detail from the finish gate: the <strong>blocked status</strong>.</p>
+<p>Sometimes agents genuinely can&#39;t proceed without human input. &quot;I found three possible bottlenecks. Which one should I focus on?&quot;</p>
+<p>The blocked status provides an escape hatch:</p>
+<pre><code class="language-python">if all(task.status in [&quot;completed&quot;, &quot;blocked&quot;] for task in context.tasks):
+    # Can finish if everything is either done or waiting for human
+    return {&quot;status&quot;: &quot;success&quot;}
+</code></pre>
+<p>This prevents the agent from getting stuck in an unwinnable state. If it marks a task as blocked and explains why, it&#39;s allowed to pause and ask for help.</p>
+<h2>Code Review for Prompts</h2>
+<p>Here&#39;s a meta-application of this principle: using code to enforce prompt correctness.</p>
+<p>The Alex team runs <strong>Claude Code Review on every PR</strong> with validation rules in the project&#39;s <code>claude.md</code>. One class of bugs this catches: prompt-tool mismatches.</p>
+<p>If your prompt says &quot;call get_trace_preview to examine the trace,&quot; but the tool was recently renamed to <code>fetch_trace_summary</code>, that&#39;s a runtime failure that unit tests won&#39;t catch.</p>
+<p>Code review acts as a constraint on the prompt itself, ensuring references stay valid. Natural language bugs caught by natural language review, backed by tooling.</p>
+<h2>Takeaway: Design for Enforcement</h2>
+<p>When you&#39;re building an agent system and you find yourself adding emphatic instructions to the prompt—<code>ALWAYS</code>, <code>NEVER</code>, <code>MUST</code>—pause and ask:</p>
+<p><strong>Can this rule be enforced in code instead?</strong></p>
+<p>If the answer is yes, move it out of the prompt and into the tool. Make it a constraint, not a suggestion.</p>
+<p>Your production agents will be more reliable, your debugging will be clearer (structured errors are easier to trace than vague misbehavior), and you&#39;ll sleep better knowing that critical rules can&#39;t be bypassed through attention drift or creative interpretation.</p>
+<p>Prompts are powerful. They guide, they teach, they provide context. But when it matters—when a rule must hold—<strong>code is your contract</strong>.</p>
+<hr>
+<h2>References</h2>
+<ul>
+<li>Laurie Voss, &quot;Building Production AI Agents&quot; (Arise AI talk, 2026)</li>
+<li>Arise AX: Observability and evaluation platform for AI systems</li>
+<li>Pattern also visible in: Cursor (to-do objects), Claude Code (file references), Alex (finish gate)</li>
+</ul>
+<h2>Related Topics</h2>
+<ul>
+<li>Agent planning systems (to-do list patterns)</li>
+<li>Context engineering (large JSON previews)</li>
+<li>Testing non-deterministic systems (golden sessions)</li>
+<li>Small, sharp, composable tools (Unix philosophy for AI)</li>
+</ul>
+
+</body>
+</html>
