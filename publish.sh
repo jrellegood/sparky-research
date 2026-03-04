@@ -39,23 +39,30 @@ HTML_URL="https://jrellegood.com/sparky-research/$HTML_BASENAME"
 echo "Waiting for GitHub Pages to deploy $HTML_URL..."
 echo "(This usually takes 30-60 seconds)"
 
+# Initial delay before checking (GitHub Pages deployment is never instant)
+sleep 10
+
 # Wait and verify deployment
-MAX_ATTEMPTS=60
+MAX_ATTEMPTS=90
 ATTEMPT=0
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HTML_URL")
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HTML_URL" 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" = "200" ]; then
         echo " ✓ Page is live!"
+        # Extra wait to ensure it's fully propagated
+        sleep 5
         break
     fi
     echo -n "."
-    sleep 1
+    sleep 2
     ATTEMPT=$((ATTEMPT + 1))
 done
 
 if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
     echo ""
-    echo "Warning: Timed out waiting for GitHub Pages. Proceeding anyway..."
+    echo "ERROR: Timed out waiting for GitHub Pages deployment."
+    echo "The article may not be accessible yet. Aborting Readwise send."
+    exit 1
 fi
 
 # Send to Readwise (GitHub Pages URL)
