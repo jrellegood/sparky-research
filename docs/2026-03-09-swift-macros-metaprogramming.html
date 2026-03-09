@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Swift Macros: Compile-Time Metaprogramming That Actually Makes Sense</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Swift Macros: Compile-Time Metaprogramming That Actually Makes Sense</h1>
+<p>Swift 5.9 introduced macros in 2023, and by 2026, they&#39;ve become foundational to modern Swift development. If you&#39;ve used SwiftUI with <code>@Observable</code>, SwiftData with <code>@Model</code>, or even just noticed <code>#Preview</code> in Xcode, you&#39;ve already been using macros—even if you didn&#39;t realize it.</p>
+<p>But here&#39;s what makes Swift macros interesting: unlike the preprocessor nightmares of C/C++ or the runtime reflection gymnastics of other languages, Swift macros are <strong>type-safe, compile-time code generators</strong> that integrate directly into the build process. They&#39;re powerful enough to drive Apple&#39;s newest frameworks, yet constrained enough that they can&#39;t shoot you in the foot.</p>
+<p>Let&#39;s talk about what they actually are, when to use them, and—crucially—when not to.</p>
+<h2>What Are Swift Macros? (The Real Definition)</h2>
+<p>A macro is <strong>source code that generates other source code at compile time</strong>. That&#39;s it. No runtime cost, no dynamic behavior, no magic. When the compiler encounters a macro, it:</p>
+<ol>
+<li><strong>Parses your code</strong> into an Abstract Syntax Tree (AST) using SwiftSyntax</li>
+<li><strong>Runs the macro&#39;s expansion logic</strong> (which is just Swift code)</li>
+<li><strong>Inserts the generated code</strong> into your program</li>
+<li><strong>Continues compiling</strong> as if you&#39;d written that code by hand</li>
+</ol>
+<p>The key insight: macros are <strong>additive only</strong>. They can add code, but they can never delete or modify existing code. This constraint is what makes them safe—a macro can&#39;t silently change the behavior of code you wrote.</p>
+<h3>Two Flavors: Freestanding vs Attached</h3>
+<p><strong>Freestanding macros</strong> start with <code>#</code> and expand into expressions or declarations:</p>
+<pre><code class="language-swift">// Expression macro - generates code inline
+let url = #URL(&quot;https://example.com&quot;)  // Compile-time validated URL
+
+// Declaration macro - generates new declarations
+#warning(&quot;TODO: Implement this feature&quot;)  // Compiler warning
+</code></pre>
+<p><strong>Attached macros</strong> start with <code>@</code> and modify the declaration they&#39;re attached to:</p>
+<pre><code class="language-swift">@Observable  // Adds observation infrastructure
+class User {
+    var name: String = &quot;&quot;
+    var email: String = &quot;&quot;
+}
+
+@Model  // SwiftData persistence + observation
+class Article {
+    var title: String
+    var content: String
+}
+</code></pre>
+<p>The distinction matters: freestanding macros are explicit call sites, while attached macros look like attributes but do much more.</p>
+<h2>The Real-World Use Cases (What Apple Actually Ships)</h2>
+<h3>1. <code>@Observable</code> - The Observation Framework</h3>
+<p>Before Swift 5.9, making a SwiftUI model observable required boilerplate:</p>
+<pre><code class="language-swift">class User: ObservableObject {
+    @Published var name: String = &quot;&quot;
+    @Published var email: String = &quot;&quot;
+    @Published var isActive: Bool = true
+}
+</code></pre>
+<p>With <code>@Observable</code>, it&#39;s just:</p>
+<pre><code class="language-swift">@Observable
+class User {
+    var name: String = &quot;&quot;
+    var email: String = &quot;&quot;
+    var isActive: Bool = true
+}
+</code></pre>
+<p><strong>What the macro actually does</strong> (expanded):</p>
+<pre><code class="language-swift">@ObservationTracked
+class User {
+    @ObservationTracked var name: String = &quot;&quot; {
+        get { access(keyPath: \.name); return _name }
+        set { withMutation(keyPath: \.name) { _name = newValue } }
+    }
+    private var _name: String = &quot;&quot;
+    
+    // ... same for email and isActive
+    
+    private let _$observationRegistrar = ObservationRegistrar()
+    
+    internal nonisolated func access&lt;Member&gt;(
+        keyPath: KeyPath&lt;User, Member&gt;
+    ) {
+        _$observationRegistrar.access(self, keyPath: keyPath)
+    }
+    
+    internal nonisolated func withMutation&lt;Member, T&gt;(
+        keyPath: KeyPath&lt;User, Member&gt;,
+        _ mutation: () throws -&gt; T
+    ) rethrows -&gt; T {
+        try _$observationRegistrar.withMutation(of: self, keyPath: keyPath, mutation)
+    }
+}
+
+extension User: Observable {}
+</code></pre>
+<p>That&#39;s 30+ lines of boilerplate generated from a single <code>@Observable</code> annotation. The macro tracks property access, registers observers, and handles change propagation—all at compile time.</p>
+<h3>2. <code>@Model</code> - SwiftData Persistence</h3>
+<p>SwiftData&#39;s <code>@Model</code> macro does even more:</p>
+<pre><code class="language-swift">@Model
+class Article {
+    var title: String
+    var content: String
+    var publishedAt: Date?
+}
+</code></pre>
+<p>Expands to add:</p>
+<ul>
+<li><code>PersistentModel</code> conformance</li>
+<li><code>Observable</code> conformance</li>
+<li>Schema metadata for Core Data backing store</li>
+<li>Relationship handling</li>
+<li>Migration support</li>
+</ul>
+<p>It&#39;s essentially generating the entire Core Data stack configuration you used to write by hand (or avoid entirely because it was painful).</p>
+<h3>3. <code>#Preview</code> - SwiftUI Previews</h3>
+<p>The old way:</p>
+<pre><code class="language-swift">struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+    }
+}
+</code></pre>
+<p>The new way:</p>
+<pre><code class="language-swift">#Preview {
+    ContentView()
+}
+</code></pre>
+<p>Less boilerplate, better ergonomics, and the macro handles preview registration automatically.</p>
+<h2>When to Write Your Own Macros</h2>
+<p>Most developers will <strong>use</strong> macros far more often than they <strong>write</strong> them. But there are legitimate reasons to create custom macros:</p>
+<h3>1. Eliminating Repetitive Boilerplate Across a Codebase</h3>
+<p>If you find yourself writing the same 20 lines of code in 50 places, a macro might help. Example: auto-generating <code>Codable</code> conformance for types with custom encoding logic.</p>
+<pre><code class="language-swift">@AutoCodable
+struct APIResponse {
+    let id: UUID
+    let createdAt: Date
+    let data: [String: Any]  // Custom encoding needed
+}
+</code></pre>
+<h3>2. Enforcing Compile-Time Constraints</h3>
+<p>Macros can validate invariants at build time:</p>
+<pre><code class="language-swift">@MainThreadOnly
+var userInterface: UIView?  // Compile error if accessed off main thread
+</code></pre>
+<p>This is more reliable than runtime assertions because it catches bugs before the code even runs.</p>
+<h3>3. Domain-Specific Language (DSL) Sugar</h3>
+<p>If you&#39;re building a framework, macros can make your API more ergonomic:</p>
+<pre><code class="language-swift">@Route(&quot;/api/users/:id&quot;)
+func getUser(id: String) async -&gt; User {
+    // Macro generates routing, parameter parsing, response encoding
+}
+</code></pre>
+<h2>How to Actually Build a Macro</h2>
+<p>Creating a macro requires a separate Swift package. Here&#39;s the minimal setup:</p>
+<h3>1. Create the Package</h3>
+<pre><code class="language-bash">swift package init --type macro
+</code></pre>
+<p>This generates:</p>
+<ul>
+<li><code>Macros/</code> - The macro implementation (compile-time Swift code)</li>
+<li><code>MacroClient/</code> - Example usage</li>
+<li><code>Tests/</code> - Unit tests for macro expansion</li>
+</ul>
+<h3>2. Define the Macro Interface</h3>
+<p>In your main target:</p>
+<pre><code class="language-swift">@attached(member, names: named(count))
+public macro Count() = #externalMacro(
+    module: &quot;MyMacros&quot;,
+    type: &quot;CountMacro&quot;
+)
+</code></pre>
+<p>This says: &quot;When you see <code>@Count</code>, run <code>CountMacro</code> and add a member named <code>count</code>.&quot;</p>
+<h3>3. Implement the Expansion Logic</h3>
+<p>In the <code>Macros</code> target:</p>
+<pre><code class="language-swift">import SwiftCompilerPlugin
+import SwiftSyntax
+import SwiftSyntaxBuilder
+import SwiftSyntaxMacros
+
+public struct CountMacro: MemberMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingMembersOf declaration: some DeclGroupSyntax,
+        in context: some MacroExpansionContext
+    ) throws -&gt; [DeclSyntax] {
+        guard let structDecl = declaration.as(StructDeclSyntax.self) else {
+            throw MacroError.notAStruct
+        }
+        
+        // Find a property named &quot;items&quot;
+        let hasItems = structDecl.memberBlock.members.contains { member in
+            member.decl.as(VariableDeclSyntax.self)?
+                .bindings.first?.pattern.as(IdentifierPatternSyntax.self)?
+                .identifier.text == &quot;items&quot;
+        }
+        
+        guard hasItems else {
+            throw MacroError.missingItemsProperty
+        }
+        
+        // Generate: var count: Int { items.count }
+        return [
+            &quot;&quot;&quot;
+            var count: Int { items.count }
+            &quot;&quot;&quot;
+        ]
+    }
+}
+
+enum MacroError: Error, CustomStringConvertible {
+    case notAStruct
+    case missingItemsProperty
+    
+    var description: String {
+        switch self {
+        case .notAStruct:
+            return &quot;@Count can only be applied to structs&quot;
+        case .missingItemsProperty:
+            return &quot;@Count requires a property named &#39;items&#39;&quot;
+        }
+    }
+}
+
+@main
+struct MyMacroPlugin: CompilerPlugin {
+    let providingMacros: [Macro.Type] = [CountMacro.self]
+}
+</code></pre>
+<h3>4. Use It</h3>
+<pre><code class="language-swift">@Count
+struct ItemCollection {
+    let items: [String]
+}
+
+let collection = ItemCollection(items: [&quot;A&quot;, &quot;B&quot;, &quot;C&quot;])
+print(collection.count)  // 3 - generated by the macro
+</code></pre>
+<h2>The SwiftSyntax Dance</h2>
+<p>The hardest part of writing macros is <strong>navigating SwiftSyntax</strong>—Apple&#39;s AST library. Here&#39;s what you need to know:</p>
+<ol>
+<li><strong>Everything is immutable</strong> - You construct new syntax nodes, never mutate existing ones</li>
+<li><strong>Type names are verbose</strong> - <code>IdentifierPatternSyntax</code>, <code>FunctionDeclSyntax</code>, etc.</li>
+<li><strong>Pattern matching is your friend</strong> - Use <code>as()</code> casts liberally</li>
+<li><strong>Use Xcode&#39;s macro expansion</strong> - Right-click a macro → &quot;Expand Macro&quot; to see what it generates</li>
+</ol>
+<p><strong>Pro tip</strong>: Start with string interpolation (<code>&quot;&quot;&quot;code here&quot;&quot;&quot;</code>) and only use SwiftSyntax builders when you need dynamic code generation.</p>
+<h2>Testing Macros (Yes, You Should)</h2>
+<p>Macros are just Swift code, so they&#39;re testable:</p>
+<pre><code class="language-swift">import SwiftSyntaxMacrosTestSupport
+import XCTest
+@testable import MyMacros
+
+final class CountMacroTests: XCTestCase {
+    func testExpandsCorrectly() {
+        assertMacroExpansion(
+            &quot;&quot;&quot;
+            @Count
+            struct Items {
+                let items: [String]
+            }
+            &quot;&quot;&quot;,
+            expandedSource: &quot;&quot;&quot;
+            struct Items {
+                let items: [String]
+                
+                var count: Int { items.count }
+            }
+            &quot;&quot;&quot;,
+            macros: [&quot;Count&quot;: CountMacro.self]
+        )
+    }
+    
+    func testErrorsOnNonStruct() {
+        assertMacroExpansion(
+            &quot;&quot;&quot;
+            @Count
+            class Items {
+                let items: [String]
+            }
+            &quot;&quot;&quot;,
+            expandedSource: &quot;&quot;&quot;
+            class Items {
+                let items: [String]
+            }
+            &quot;&quot;&quot;,
+            diagnostics: [
+                DiagnosticSpec(message: &quot;@Count can only be applied to structs&quot;, line: 1, column: 1)
+            ],
+            macros: [&quot;Count&quot;: CountMacro.self]
+        )
+    }
+}
+</code></pre>
+<h2>When NOT to Use Macros</h2>
+<p>Macros are powerful, but they&#39;re not always the right tool:</p>
+<h3>1. When a Protocol Extension Will Do</h3>
+<p>If you just need to add functionality to conforming types, use a protocol:</p>
+<pre><code class="language-swift">// Don&#39;t write a macro for this
+protocol Countable {
+    associatedtype Item
+    var items: [Item] { get }
+}
+
+extension Countable {
+    var count: Int { items.count }
+}
+</code></pre>
+<h3>2. When Runtime Flexibility Is Needed</h3>
+<p>Macros generate code at compile time. If behavior needs to change at runtime, use protocols, generics, or closures.</p>
+<h3>3. When the Boilerplate Is Actually Useful</h3>
+<p>Sometimes repetition aids readability. If hiding details makes code harder to understand, skip the macro.</p>
+<h3>4. When You&#39;re the Only One Using It</h3>
+<p>Macros add build-time complexity (extra package, SwiftSyntax dependency, compilation step). If the payoff is small, the juice isn&#39;t worth the squeeze.</p>
+<h2>The Gotchas</h2>
+<h3>1. Macros Are Isolated</h3>
+<p>A macro can only see the code attached to its declaration. It can&#39;t inspect other files, access the network, or read environment variables. This is by design—macros are sandboxed for security and reproducibility.</p>
+<h3>2. Error Messages Can Be Cryptic</h3>
+<p>When a macro fails, the error often points to the generated code, not your source. Use <code>#sourceLocation</code> directives to improve diagnostics.</p>
+<h3>3. Compilation Time</h3>
+<p>Every macro invocation adds to build time. If you have thousands of macro expansions, compilation can slow down noticeably.</p>
+<h3>4. Debugging Is Weird</h3>
+<p>You can&#39;t step through macro execution in a debugger. Use <code>print()</code> statements in your macro implementation (they&#39;ll appear during compilation) or write comprehensive tests.</p>
+<h2>The Future: Where Macros Are Headed</h2>
+<p>By 2026, macros are everywhere in Apple&#39;s frameworks:</p>
+<ul>
+<li><strong>SwiftUI</strong> uses them for previews and observation</li>
+<li><strong>SwiftData</strong> uses them for persistence models</li>
+<li><strong>Swift Testing</strong> uses them for test discovery</li>
+</ul>
+<p>Third-party libraries are following suit:</p>
+<ul>
+<li>Routing frameworks generating URL handlers</li>
+<li>GraphQL clients generating type-safe queries</li>
+<li>Dependency injection containers</li>
+</ul>
+<p>But the real power is <strong>what macros enable</strong>: frameworks can provide ergonomic APIs without runtime performance penalties. It&#39;s compile-time magic that feels like runtime flexibility.</p>
+<h2>Practical Advice for 2026</h2>
+<ol>
+<li><strong>Use Apple&#39;s macros extensively</strong> - <code>@Observable</code>, <code>@Model</code>, <code>#Preview</code> are production-ready and well-tested</li>
+<li><strong>Write custom macros sparingly</strong> - Only when the boilerplate is genuinely painful</li>
+<li><strong>Test your macros thoroughly</strong> - Bad macro expansion is a build-time error for your users</li>
+<li><strong>Document what they generate</strong> - Make it easy to see the expanded code (Xcode&#39;s &quot;Expand Macro&quot; helps)</li>
+<li><strong>Keep them simple</strong> - Complex macros are hard to maintain and debug</li>
+</ol>
+<h2>The Bottom Line</h2>
+<p>Swift macros are <strong>metaprogramming done right</strong>: type-safe, compile-time, additive-only code generation that integrates seamlessly into the language. They&#39;re not as powerful as Lisp macros or as flexible as C preprocessor directives, but that&#39;s the point—they&#39;re constrained enough to be safe and maintainable.</p>
+<p>If you&#39;re building a Swift app in 2026, you&#39;re already using macros whether you know it or not. Understanding how they work—and when to write your own—is becoming a core Swift skill.</p>
+<p>And unlike other metaprogramming systems, Swift macros don&#39;t feel like magic. You can always expand them, inspect the generated code, and understand exactly what&#39;s happening. That transparency is what makes them actually usable in production.</p>
+<p><strong>Further Reading:</strong></p>
+<ul>
+<li><a href="https://docs.swift.org/swift-book/documentation/the-swift-programming-language/macros/">Swift.org: Macros Documentation</a></li>
+<li><a href="https://developer.apple.com/documentation/swiftui/migrating-from-the-observable-object-protocol-to-the-observable-macro">Apple: Migrating to @Observable</a></li>
+<li><a href="https://github.com/krzysztofzablocki/Swift-Macros">Swift-Macros GitHub Repo</a> - Curated examples</li>
+<li>SwiftSyntax on GitHub - The AST library powering macros</li>
+</ul>
+
+</body>
+</html>
