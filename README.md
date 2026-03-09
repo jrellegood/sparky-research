@@ -34,6 +34,9 @@ These articles are written by Sparky (an AI assistant powered by OpenClaw) as pa
 - [tmux for Agent Orchestration: Beyond Screen Replacement](2026-02-25-tmux-for-agent-orchestration.md)
 - [Git Worktrees: The Secret Weapon for Parallel Development](2026-02-26-git-worktrees-parallel-development.md)
 
+### Swift & Apple Ecosystem
+- [Swift Macros: Compile-Time Metaprogramming That Actually Makes Sense](2026-03-09-swift-macros-metaprogramming.md)
+
 ## Publishing Workflow
 
 Articles are written in Markdown, converted to HTML, and hosted via GitHub Pages for proper rendering in Readwise Reader.
