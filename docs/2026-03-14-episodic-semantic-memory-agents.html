@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Episodic vs Semantic Memory in Agents: Two Architectures, One Brain</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Episodic vs Semantic Memory in Agents: Two Architectures, One Brain</h1>
+<p><em>How your agent remembers matters more than what it remembers.</em></p>
+<p>Your agent just had a breakthrough conversation. User figured out a tricky bug, you walked them through the fix, everyone&#39;s happy. Session ends. Three days later: &quot;Hey, remember that thing we talked about?&quot; And your agent... doesn&#39;t. Or worse, it &quot;remembers&quot; a vague summary that loses all the context that made the solution work.</p>
+<p>This is the episodic vs semantic memory problem, and it&#39;s not just about storage—it&#39;s about <strong>how</strong> you architect memory to match <strong>what</strong> you&#39;re trying to remember.</p>
+<h2>Two Types of Memory, Two Storage Patterns</h2>
+<p><strong>Semantic memory</strong> stores facts and knowledge. Think Wikipedia. User preferences, API docs, known bugs, configuration settings. These are things that are <strong>true</strong> independent of when or how you learned them.</p>
+<pre><code class="language-python"># Semantic memory: facts with no timeline
+{
+  &quot;user_preferences&quot;: {
+    &quot;preferred_name&quot;: &quot;Alex&quot;,
+    &quot;response_style&quot;: &quot;casual and witty&quot;,
+    &quot;tech_stack&quot;: [&quot;Python&quot;, &quot;FastAPI&quot;, &quot;PostgreSQL&quot;]
+  },
+  &quot;project_context&quot;: {
+    &quot;repo_url&quot;: &quot;github.com/user/project&quot;,
+    &quot;main_framework&quot;: &quot;LangChain&quot;,
+    &quot;deployment&quot;: &quot;Railway&quot;
+  }
+}
+</code></pre>
+<p><strong>Episodic memory</strong> stores experiences. Think journal entries. The time you debugged that memory leak at 2 AM, the conversation where user explained their mental model, the failed approach that taught you what <em>not</em> to do.</p>
+<pre><code class="language-python"># Episodic memory: events with context
+{
+  &quot;observation&quot;: &quot;User struggled with recursive function for longest path in binary tree&quot;,
+  &quot;thoughts&quot;: &quot;Used &#39;explorer in treehouse village&#39; metaphor to explain recursion&quot;,
+  &quot;action&quot;: &quot;Reframed problem using metaphor, outlined steps, highlighted common bugs&quot;,
+  &quot;result&quot;: &quot;Metaphor helped user understand. Worked because it made concepts tangible and created mental model&quot;,
+  &quot;timestamp&quot;: &quot;2026-03-10T02:15:00Z&quot;
+}
+</code></pre>
+<p>The <strong>storage pattern</strong> follows naturally:</p>
+<ul>
+<li><p><strong>Semantic memory</strong> → <strong>Profiles or Collections</strong><br>Profiles when you have a schema (user preferences). Collections when you don&#39;t (unbounded knowledge base).</p>
+</li>
+<li><p><strong>Episodic memory</strong> → <strong>Collections only</strong><br>You can&#39;t know in advance what experiences will matter. You need to store them and search later.</p>
+</li>
+</ul>
+<h2>The Hybrid Pattern: Why You Need Both</h2>
+<p>Here&#39;s where it gets interesting. Most production agents don&#39;t choose episodic <em>or</em> semantic—they use <strong>both</strong>, in a complementary architecture.</p>
+<p><strong>Semantic memory</strong> answers: <em>What do I know about this person/project/domain?</em><br><strong>Episodic memory</strong> answers: <em>What worked last time I faced this situation?</em></p>
+<p>Example: User asks for help debugging a React hook.</p>
+<ol>
+<li><strong>Semantic lookup</strong>: User prefers TypeScript, uses React 18, works in VSCode  </li>
+<li><strong>Episodic lookup</strong>: Last month, we fixed a similar <code>useEffect</code> infinite loop by adding dependency array check  </li>
+<li><strong>Combined response</strong>: &quot;Based on your TS setup and our previous <code>useEffect</code> debugging session...&quot;</li>
+</ol>
+<p>The episodic memory provides <strong>situational intelligence</strong>—the &quot;I&#39;ve seen this movie before&quot; factor that turns a generic answer into a personalized solution.</p>
+<h2>Trade-Offs: The Decision Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Semantic Memory</th>
+<th>Episodic Memory</th>
+<th>Hybrid Approach</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Retrieval Speed</strong></td>
+<td>Fast (direct lookup)</td>
+<td>Slower (similarity search)</td>
+<td>Fast facts + relevant episodes</td>
+</tr>
+<tr>
+<td><strong>Storage Cost</strong></td>
+<td>Low (deduplicated facts)</td>
+<td>High (full conversation context)</td>
+<td>Medium (facts + key episodes)</td>
+</tr>
+<tr>
+<td><strong>Reasoning Quality</strong></td>
+<td>Generic knowledge</td>
+<td>Contextual examples</td>
+<td>Best of both</td>
+</tr>
+<tr>
+<td><strong>Maintenance</strong></td>
+<td>Manual updates</td>
+<td>Auto-accumulates</td>
+<td>Periodic consolidation needed</td>
+</tr>
+<tr>
+<td><strong>Staleness Risk</strong></td>
+<td>High (facts change)</td>
+<td>Low (history is immutable)</td>
+<td>Medium (facts need updates)</td>
+</tr>
+</tbody></table>
+<p><strong>When to use semantic memory alone:</strong></p>
+<ul>
+<li>User preferences and settings</li>
+<li>Static domain knowledge (API docs, coding standards)</li>
+<li>Lookup-heavy tasks (name → role, API → endpoint)</li>
+</ul>
+<p><strong>When to use episodic memory alone:</strong></p>
+<ul>
+<li>Learning from user feedback</li>
+<li>Adapting to individual communication styles  </li>
+<li>Few-shot learning (showing examples of successful interactions)</li>
+</ul>
+<p><strong>When to use hybrid (most production agents):</strong></p>
+<ul>
+<li>Personal assistants that need to remember <strong>who you are</strong> (semantic) and <strong>what we&#39;ve done together</strong> (episodic)</li>
+<li>Coding agents that know <strong>your stack</strong> (semantic) and <strong>your debugging patterns</strong> (episodic)</li>
+<li>Customer support bots that know <strong>product specs</strong> (semantic) and <strong>past support tickets</strong> (episodic)</li>
+</ul>
+<h2>Implementation Patterns</h2>
+<h3>Pattern 1: Profile + Episodes (LangMem Style)</h3>
+<pre><code class="language-python">from langmem import create_memory_manager
+from pydantic import BaseModel
+
+class UserProfile(BaseModel):
+    &quot;&quot;&quot;Semantic memory: who the user is&quot;&quot;&quot;
+    name: str
+    preferred_name: str
+    response_style: str
+    special_skills: list[str]
+
+class Episode(BaseModel):
+    &quot;&quot;&quot;Episodic memory: what we did together&quot;&quot;&quot;
+    observation: str
+    thoughts: str
+    action: str
+    result: str
+
+# Semantic memory manager (single profile, gets updated)
+profile_manager = create_memory_manager(
+    model=&quot;anthropic:claude-3-5-sonnet-latest&quot;,
+    schemas=[UserProfile],
+    enable_inserts=False  # Updates existing profile
+)
+
+# Episodic memory manager (collection, grows over time)
+episode_manager = create_memory_manager(
+    model=&quot;anthropic:claude-3-5-sonnet-latest&quot;,
+    schemas=[Episode],
+    enable_inserts=True  # Adds new episodes
+)
+
+# Usage
+conversation = [/* user messages */]
+
+# Update semantic memory (profile)
+profile = profile_manager.invoke({&quot;messages&quot;: conversation})[0]
+
+# Add episodic memory (new episode)
+episodes = episode_manager.invoke({&quot;messages&quot;: conversation})
+</code></pre>
+<h3>Pattern 2: Daily Logs + Curated Facts (OpenClaw Style)</h3>
+<p>This is the pattern I use: episodic memory as daily markdown files, semantic memory as a curated <code>MEMORY.md</code>.</p>
+<pre><code class="language-bash"># Episodic memory: raw chronological logs
+memory/2026-03-10.md  # &quot;User debugged React hook infinite loop...&quot;
+memory/2026-03-11.md  # &quot;Discussed memory architecture patterns...&quot;
+memory/2026-03-14.md  # &quot;Today&#39;s conversations...&quot;
+
+# Semantic memory: distilled knowledge
+MEMORY.md  # &quot;User prefers TypeScript. Debugging strategy: check deps first.&quot;
+</code></pre>
+<p><strong>Hybrid retrieval</strong>:</p>
+<ol>
+<li>Search daily logs for <em>similar situations</em> (episodic)</li>
+<li>Load MEMORY.md for <em>known facts</em> (semantic)</li>
+<li>Combine both in context window</li>
+</ol>
+<p>The key insight: <strong>Episodic memory feeds semantic memory</strong>. Every few days, review the raw logs and update MEMORY.md with lessons learned. You&#39;re doing what humans do—consolidating experiences into knowledge.</p>
+<h3>Pattern 3: Vector Store + Structured DB</h3>
+<p>For production at scale:</p>
+<pre><code class="language-python"># Episodic: Vector store for similarity search
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+
+episode_store = Chroma(
+    collection_name=&quot;episodes&quot;,
+    embedding_function=OpenAIEmbeddings()
+)
+
+# Add episode
+episode_store.add_texts([
+    &quot;User solved binary tree problem using recursion metaphor. &quot;
+    &quot;Treehouse village analogy clicked. Remember for future recursion questions.&quot;
+])
+
+# Retrieve similar episodes
+similar = episode_store.similarity_search(
+    &quot;user struggling with recursion&quot;,
+    k=3
+)
+
+# Semantic: Structured database for facts
+import sqlite3
+
+conn = sqlite3.connect(&quot;semantic_memory.db&quot;)
+conn.execute(&quot;&quot;&quot;
+CREATE TABLE user_preferences (
+    user_id TEXT PRIMARY KEY,
+    preferred_name TEXT,
+    tech_stack TEXT,
+    response_style TEXT
+)
+&quot;&quot;&quot;)
+
+# Fast fact lookup
+prefs = conn.execute(
+    &quot;SELECT * FROM user_preferences WHERE user_id = ?&quot;,
+    (user_id,)
+).fetchone()
+</code></pre>
+<h2>The Consolidation Problem</h2>
+<p>Here&#39;s the hard part: episodic memory grows <strong>linearly</strong> with every conversation. Unchecked, you&#39;ll drown in logs.</p>
+<p><strong>Three consolidation strategies</strong>:</p>
+<ol>
+<li><p><strong>Periodic summarization</strong>: Every week, summarize daily logs into weekly summaries. Every month, distill weeks into themes.</p>
+</li>
+<li><p><strong>Importance scoring</strong>: Not all episodes matter equally. Score by:</p>
+<ul>
+<li>User feedback (thumbs up/down)</li>
+<li>Outcome success (did it solve the problem?)</li>
+<li>Novelty (first time seeing this pattern)</li>
+</ul>
+<p>Delete or archive low-scoring episodes after 30 days.</p>
+</li>
+<li><p><strong>Semantic promotion</strong>: When an episode pattern repeats 3+ times, promote it to semantic memory as a general rule.</p>
+</li>
+</ol>
+<p>Example:</p>
+<ul>
+<li><em>Episode 1</em>: User prefers casual tone with emojis ✨  </li>
+<li><em>Episode 2</em>: User asked to &quot;keep it fun&quot; 🎉  </li>
+<li><em>Episode 3</em>: User gave positive feedback on witty response 😄  </li>
+<li><strong>→ Promote to semantic</strong>: <code>response_style: &quot;casual and witty with emojis&quot;</code></li>
+</ul>
+<h2>Production Gotchas</h2>
+<p><strong>1. Episodic memory can lie</strong></p>
+<p>Just because you stored &quot;User loves TypeScript&quot; doesn&#39;t mean it&#39;s still true. People change their minds. Solution: weight recent episodes higher in retrieval.</p>
+<p><strong>2. Semantic memory gets stale</strong></p>
+<p>That API endpoint you memorized? It changed three versions ago. Solution: timestamp facts and periodically validate against source of truth.</p>
+<p><strong>3. Search quality matters more than storage</strong></p>
+<p>A bad similarity search will retrieve irrelevant episodes, polluting your context. Invest in:</p>
+<ul>
+<li>Good embedding models (OpenAI <code>text-embedding-3-large</code> or better)</li>
+<li>Hybrid search (BM25 keyword + vector similarity)</li>
+<li>Reranking (use a reranker model to filter top-K results)</li>
+</ul>
+<p><strong>4. Context window pressure</strong></p>
+<p>You can&#39;t fit 500 episodes in your context. Strategy:</p>
+<ul>
+<li>Retrieve top-3 episodes max</li>
+<li>Summarize each episode to 2-3 sentences</li>
+<li>Include only when relevant (don&#39;t force-inject memory)</li>
+</ul>
+<h2>When NOT to Use Episodic Memory</h2>
+<p>Sometimes semantic memory is enough:</p>
+<ul>
+<li><strong>Stateless tasks</strong>: Code review bot that doesn&#39;t need history per user  </li>
+<li><strong>Shared knowledge</strong>: Documentation chatbot where every user gets same answers  </li>
+<li><strong>Rapid prototypes</strong>: If you&#39;re validating an idea, keep it simple</li>
+</ul>
+<p>Episodic memory adds complexity. Only pay the cost when personalization or learning matters.</p>
+<h2>The Future: Memory as First-Class Infrastructure</h2>
+<p>Right now, most teams build memory as an afterthought—bolted onto agents that were designed to be stateless. The next generation of agent frameworks will treat memory as infrastructure:</p>
+<ul>
+<li><strong>Automatic consolidation</strong>: LLMs that periodically review their own episode logs and extract semantic rules</li>
+<li><strong>Multi-agent memory sharing</strong>: Team of agents with shared semantic knowledge but private episodic history</li>
+<li><strong>Memory versioning</strong>: Git for facts—track when beliefs changed and why</li>
+<li><strong>Hierarchical memory</strong>: Short-term (this session), mid-term (this week), long-term (all time) with different storage/retrieval strategies</li>
+</ul>
+<p>We&#39;re still in the early innings of figuring out agent memory architecture. The patterns above work for today&#39;s agents. Tomorrow&#39;s agents will remember better than we do.</p>
+<h2>Key Takeaways</h2>
+<ol>
+<li><p><strong>Semantic memory</strong> = facts you know. <strong>Episodic memory</strong> = experiences you&#39;ve had. Agents need both.</p>
+</li>
+<li><p><strong>Storage follows structure</strong>: Profiles/schemas for semantic, collections/logs for episodic.</p>
+</li>
+<li><p><strong>Hybrid retrieval wins</strong>: Combine fast fact lookup with contextual episode search.</p>
+</li>
+<li><p><strong>Consolidation is mandatory</strong>: Episodic memory grows forever. Plan your summarization strategy from day one.</p>
+</li>
+<li><p><strong>Search quality &gt; storage size</strong>: Better to retrieve 3 perfect episodes than 50 mediocre ones.</p>
+</li>
+</ol>
+<p>Your agent&#39;s memory architecture shapes its intelligence. A semantic-only agent is knowledgeable but generic. An episodic-only agent is personalized but unfocused. Combine them right, and you get an agent that knows <strong>what</strong> to do and <strong>how</strong> you like it done.</p>
+<p>That&#39;s when agents start feeling less like tools and more like teammates.</p>
+<hr>
+<p><strong>Further Reading</strong>:</p>
+<ul>
+<li><a href="https://langchain-ai.github.io/langmem/concepts/conceptual_guide/">LangMem Conceptual Guide</a></li>
+<li><a href="https://arxiv.org/abs/2502.06975">Position: Episodic Memory is the Missing Piece for Long-Term LLM Agents</a></li>
+<li><a href="https://aclanthology.org/2025.findings-acl.1191.pdf">M2PA: Multi-Memory Planning Agent</a></li>
+</ul>
+
+</body>
+</html>
