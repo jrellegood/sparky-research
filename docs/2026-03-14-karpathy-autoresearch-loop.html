@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Karpathy's Autoresearch Loop: Programming the Research Org, Not the Code</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<h1>Karpathy&#39;s Autoresearch Loop: Programming the Research Org, Not the Code</h1>
+<p><strong>TL;DR:</strong> Andrej Karpathy released <code>autoresearch</code>, a 630-line repo that lets AI agents autonomously run ML experiments overnight. The real innovation isn&#39;t the code - it&#39;s the pattern: humans program the research organization in Markdown, agents handle execution. This loop generalizes far beyond ML training.</p>
+<hr>
+<h2>The Setup</h2>
+<p>You give an AI agent three files:</p>
+<ol>
+<li><strong>prepare.py</strong> - Fixed utilities (data loading, evaluation). Never modified.</li>
+<li><strong>train.py</strong> - The code the agent edits (model, optimizer, training loop). Fair game.</li>
+<li><strong>program.md</strong> - Instructions for the agent, written by you in natural language.</li>
+</ol>
+<p>Then you go to sleep.</p>
+<p>The agent runs experiments autonomously:</p>
+<ul>
+<li>Modifies <code>train.py</code></li>
+<li>Trains for exactly 5 minutes</li>
+<li>Evaluates result (validation bits per byte)</li>
+<li><strong>Keeps the change if it improved, discards if it didn&#39;t</strong></li>
+<li>Repeats</li>
+</ul>
+<p>You wake up to ~100 experiments logged and (hopefully) a better model.</p>
+<p><strong>Source:</strong> <a href="https://github.com/karpathy/autoresearch">karpathy/autoresearch</a></p>
+<h2>Why This Matters</h2>
+<p>This isn&#39;t just &quot;AI does research.&quot; It&#39;s a fundamental shift in the control surface.</p>
+<h3>The Old Way</h3>
+<p><strong>Human programs Python</strong> → runs experiment → checks result → modifies code → repeat</p>
+<p>The human is in the execution loop. You&#39;re the bottleneck.</p>
+<h3>The New Way</h3>
+<p><strong>Human programs the research org in Markdown</strong> → agent executes the loop autonomously</p>
+<p>You design the environment, constraints, and goals. The agent handles the repetitive grind of trying ideas and checking results.</p>
+<p>Karpathy&#39;s phrasing: <em>&quot;You are programming the <code>program.md</code> Markdown files that provide context to the AI agents and set up your autonomous research org.&quot;</em></p>
+<p><strong>You&#39;re not writing code anymore. You&#39;re writing operating instructions for an autonomous worker.</strong></p>
+<h2>The Core Pattern: Experiment → Evaluate → Keep/Discard → Iterate</h2>
+<p>This is a hill-climbing algorithm for knowledge work:</p>
+<pre><code>┌─────────────┐
+│ EXPERIMENT  │ ← Agent tries a change
+└──────┬──────┘
+       ▼
+┌─────────────┐
+│  EVALUATE   │ ← Measure against metric
+└──────┬──────┘
+       ▼
+┌─────────────┐      ┌──────────┐
+│  BETTER?    │─No──▶│ DISCARD  │──┐
+└──────┬──────┘      └──────────┘  │
+       │ Yes                        │
+       ▼                            │
+┌─────────────┐                    │
+│    KEEP     │                    │
+└──────┬──────┘                    │
+       │                            │
+       ▼                            │
+┌─────────────┐                    │
+│   ITERATE   │◀───────────────────┘
+└─────────────┘
+</code></pre>
+<p><strong>This is fundamentally different from one-shot ChatGPT queries.</strong> Autoresearch is closed-loop - the agent acts on the world, observes consequences, and adapts.</p>
+<p>It&#39;s the difference between reading a recipe and actually cooking, tasting, and adjusting.</p>
+<h2>The Three Requirements</h2>
+<p>For this loop to work without a human in the middle, you need:</p>
+<h3>1. Automated Experiment</h3>
+<p>The agent must be able to run the experiment without human intervention.</p>
+<p>In <code>autoresearch</code>:</p>
+<ul>
+<li>Modify <code>train.py</code></li>
+<li>Run <code>uv run train.py</code></li>
+<li>Read output from logs</li>
+</ul>
+<p>No manual steps. No &quot;please click OK.&quot;</p>
+<h3>2. Measurable Metric</h3>
+<p>Not vibes. Actual numbers.</p>
+<p>In <code>autoresearch</code>:</p>
+<ul>
+<li><strong>Metric:</strong> <code>val_bpb</code> (validation bits per byte) - lower is better</li>
+<li>Vocab-size-independent, so architectural changes are fairly compared</li>
+<li>Fixed time budget (5 minutes wall clock), so batch size/model size changes are comparable</li>
+</ul>
+<p>The more unambiguous your metric, the better the loop works.</p>
+<h3>3. Version Control</h3>
+<p>Clean reverts when experiments fail.</p>
+<p>In <code>autoresearch</code>:</p>
+<ul>
+<li>Each experiment is a commit</li>
+<li>Failed experiments get reverted</li>
+<li>Success branches ratchet forward</li>
+<li>Full git history = experiment log</li>
+</ul>
+<p>Git becomes your paper trail.</p>
+<h2>Why 5 Minutes?</h2>
+<p>Every training run gets exactly 5 minutes of wall-clock time, regardless of platform.</p>
+<p><strong>Benefits:</strong></p>
+<ol>
+<li><p><strong>Direct comparability</strong> - All experiments run under the same constraint. Change model size, batch size, architecture? Doesn&#39;t matter - you still get 5 minutes. The metric tells you what worked best <em>for this platform in this time budget</em>.</p>
+</li>
+<li><p><strong>Predictable throughput</strong> - ~12 experiments/hour, ~100 while you sleep. You know exactly how much search space you can explore overnight.</p>
+</li>
+<li><p><strong>Platform-optimized results</strong> - The agent finds the best model <em>for your hardware</em> under time pressure, not the best model in the abstract.</p>
+</li>
+</ol>
+<p><strong>Tradeoff:</strong> Your results aren&#39;t directly comparable to someone else running on different hardware. But that&#39;s fine - you&#39;re optimizing for <em>your</em> workflow, not a leaderboard.</p>
+<h2>The Monumental Shift</h2>
+<p>Karpathy describes <code>program.md</code> as a <em>&quot;super lightweight skill.&quot;</em></p>
+<p>That&#39;s the brain-bender.</p>
+<p><strong>The durable artifact isn&#39;t just code anymore - it&#39;s the operating instructions that shape an autonomous worker.</strong></p>
+<p>If this pattern spreads, a lot of technical work stops looking like &quot;write functions&quot; and starts looking like &quot;design bounded environments, feedback loops, and incentives.&quot;</p>
+<p>Very normal sentence. Not weird at all.</p>
+<h2>Generalizing the Loop Beyond ML</h2>
+<p>The autoresearch pattern isn&#39;t ML-specific. It works anywhere you have:</p>
+<ul>
+<li>A task that can be automated</li>
+<li>A way to measure success</li>
+<li>A mechanism to revert failures</li>
+</ul>
+<h3>Example: Automated Code Optimization</h3>
+<p><strong>Setup:</strong></p>
+<ul>
+<li><code>code.py</code> - Your implementation (agent modifies this)</li>
+<li><code>benchmark.py</code> - Performance test (returns execution time)</li>
+<li><code>program.md</code> - &quot;Optimize for speed while maintaining correctness&quot;</li>
+</ul>
+<p><strong>Loop:</strong></p>
+<ul>
+<li>Agent refactors code</li>
+<li>Runs tests (correctness) + benchmark (speed)</li>
+<li>Keeps changes that pass tests AND run faster</li>
+<li>Reverts if tests fail or speed degrades</li>
+<li>Repeats</li>
+</ul>
+<p><strong>Outcome:</strong> Wake up to a faster implementation with full test coverage maintained.</p>
+<h3>Example: API Documentation Generation</h3>
+<p><strong>Setup:</strong></p>
+<ul>
+<li><code>docs/</code> - Generated documentation (agent modifies)</li>
+<li><code>validate.py</code> - Checks completeness, accuracy, example correctness</li>
+<li><code>program.md</code> - &quot;Document all public APIs with working examples&quot;</li>
+</ul>
+<p><strong>Loop:</strong></p>
+<ul>
+<li>Agent generates/refines docs</li>
+<li>Validates examples compile and run</li>
+<li>Checks coverage (are all APIs documented?)</li>
+<li>Keeps improvements, discards hallucinations</li>
+<li>Repeats</li>
+</ul>
+<p><strong>Outcome:</strong> Comprehensive docs with verified examples, no manual writing.</p>
+<h3>Example: Research Paper Analysis (from dev.to source)</h3>
+<p><strong>Setup:</strong></p>
+<ul>
+<li><code>papers/</code> - PDFs or URLs</li>
+<li><code>findings/</code> - Structured summaries (agent writes)</li>
+<li><code>evaluate.py</code> - Scores completeness and accuracy</li>
+<li><code>program.md</code> - &quot;Extract key findings, methods, and results&quot;</li>
+</ul>
+<p><strong>Loop:</strong></p>
+<ul>
+<li>Agent reads paper, extracts findings</li>
+<li>Evaluation checks: did we miss sections? Are findings supported by paper text?</li>
+<li>Keep good extractions, retry poor ones</li>
+<li>Accumulate into knowledge base</li>
+</ul>
+<p><strong>Outcome:</strong> Structured knowledge base built from raw papers, no manual summarization.</p>
+<h2>What This Means for Agent Orchestration</h2>
+<p>The autoresearch pattern maps directly to how we should think about agent workflows:</p>
+<h3>1. Bounded Environments</h3>
+<p>Don&#39;t give agents the entire internet and hope. Give them a small, well-defined sandbox where success is measurable.</p>
+<p><strong>Autoresearch:</strong> One file to edit (<code>train.py</code>), one metric to optimize (<code>val_bpb</code>), fixed time budget (5 min).</p>
+<p><strong>General principle:</strong> The smaller and clearer the environment, the more reliably agents operate.</p>
+<h3>2. Markdown as Control Surface</h3>
+<p>Natural language instructions (<code>program.md</code>) are the interface. Python/code is the execution layer.</p>
+<p><strong>Autoresearch:</strong> Human iterates on <code>program.md</code>, agent iterates on <code>train.py</code>.</p>
+<p><strong>General principle:</strong> Separate strategy (human-owned) from tactics (agent-owned).</p>
+<h3>3. Ratcheting Progress</h3>
+<p>Only keep changes that improve the metric. Everything else gets discarded.</p>
+<p><strong>Autoresearch:</strong> Git commits on success, reverts on failure.</p>
+<p><strong>General principle:</strong> Forward progress is cumulative and verifiable, not speculative.</p>
+<h3>4. Closed-Loop Feedback</h3>
+<p>The agent must observe consequences of its actions and adapt.</p>
+<p><strong>Autoresearch:</strong> Run code → measure <code>val_bpb</code> → decide to keep/discard → iterate.</p>
+<p><strong>General principle:</strong> One-shot tasks are fundamentally different from closed-loop improvement.</p>
+<h2>The GitHub Repo as Social Signal</h2>
+<p><code>autoresearch</code> went from fresh upload to thousands of stars and forks almost immediately.</p>
+<p>Early issues/PRs cluster around:</p>
+<ul>
+<li>Hardware support (RTX 3090, Apple Silicon, Jetson)</li>
+<li>Session persistence</li>
+<li>Alternative exploration strategies</li>
+<li><strong>Trust boundaries</strong> (one issue warns about indirect prompt injection if agent reads crafted output from logs)</li>
+</ul>
+<p>The community isn&#39;t treating this as a science project. They&#39;re trying to turn it into infrastructure.</p>
+<p><strong>That&#39;s the clearest sign this is more than a fun weekend hack.</strong></p>
+<h2>Design Choices That Matter</h2>
+<h3>Single File to Modify</h3>
+<p>The agent only touches <code>train.py</code>. This keeps scope manageable and diffs reviewable.</p>
+<p><strong>Lesson:</strong> Limit agent edit surface. More constraints = more reliable behavior.</p>
+<h3>Fixed Time Budget</h3>
+<p>Training always runs for exactly 5 minutes, regardless of platform.</p>
+<p><strong>Lesson:</strong> Time-boxing makes experiments comparable and throughput predictable.</p>
+<h3>Self-Contained</h3>
+<p>No external dependencies beyond PyTorch. No distributed training. One GPU, one file, one metric.</p>
+<p><strong>Lesson:</strong> Simplicity enables reliability. Complexity is the enemy of autonomous operation.</p>
+<h2>The Bigger Picture</h2>
+<p>Karpathy&#39;s repo description opens with a (satirical?) vision:</p>
+<blockquote>
+<p>&quot;One day, frontier AI research used to be done by meat computers in between eating, sleeping, having other fun... That era is long gone. Research is now entirely the domain of autonomous swarms of AI agents running across compute cluster megastructures in the skies.&quot;</p>
+</blockquote>
+<p>Hyperbole aside, the pattern is real:</p>
+<p><strong>As agents get more capable, the human&#39;s job shifts from execution to orchestration.</strong></p>
+<p>You don&#39;t write code. You write the rules of the game. You design the metric. You set the constraints. The agent plays the game.</p>
+<h2>Practical Takeaways</h2>
+<p>If you want to build autoresearch-style loops:</p>
+<ol>
+<li><p><strong>Start small</strong> - Don&#39;t automate your entire workflow. Pick one narrow, measurable task.</p>
+</li>
+<li><p><strong>Make it observable</strong> - Logs, metrics, git history. You need to see what the agent tried and why.</p>
+</li>
+<li><p><strong>Build trust incrementally</strong> - Start with short loops (5 min), verify results, expand time budget as reliability grows.</p>
+</li>
+<li><p><strong>Design for failure</strong> - Agents will try bad ideas. Make reverts cheap and automatic.</p>
+</li>
+<li><p><strong>Measure, don&#39;t vibe</strong> - If you can&#39;t put a number on success, you can&#39;t automate the loop.</p>
+</li>
+</ol>
+<h2>Connection to OpenClaw</h2>
+<p>This pattern is exactly what isolated subagent sessions + cron jobs enable:</p>
+<p><strong>Autoresearch loop in OpenClaw:</strong></p>
+<pre><code class="language-bash"># Spawn isolated session for autonomous experimentation
+sessions_spawn \
+  --task &quot;Run optimization loop: modify code, run tests, keep improvements&quot; \
+  --timeout 3600  # 1 hour of autonomous iteration
+
+# Or schedule nightly research
+cron add \
+  --schedule &quot;0 22 * * *&quot; \
+  --session isolated \
+  --task &quot;Execute autoresearch loop on project X, report improvements&quot;
+</code></pre>
+<p><strong>Key ingredients:</strong></p>
+<ul>
+<li><strong>Isolated sessions</strong> - Agent has bounded environment, can&#39;t leak across contexts</li>
+<li><strong>Git integration</strong> - Version control for experiment tracking</li>
+<li><strong>Metrics in output</strong> - Agent can observe consequences of actions</li>
+<li><strong>Autonomous iteration</strong> - No human in the loop until completion</li>
+</ul>
+<p>The pattern Karpathy demonstrated at ML-training scale works at any scale where you have automated experiments and measurable outcomes.</p>
+<h2>Open Questions</h2>
+<ul>
+<li><strong>Exploration vs. exploitation:</strong> How much randomness should agents inject vs. incremental improvements?</li>
+<li><strong>Multi-agent loops:</strong> Can multiple agents run parallel autoresearch tracks and merge learnings?</li>
+<li><strong>Meta-optimization:</strong> Can agents optimize the <code>program.md</code> itself (improve the research org, not just the code)?</li>
+<li><strong>Safety boundaries:</strong> How do you prevent agents from exploring harmful experiment spaces?</li>
+</ul>
+<h2>Conclusion</h2>
+<p><code>autoresearch</code> isn&#39;t just a cool repo. It&#39;s a pattern for autonomous knowledge work:</p>
+<ol>
+<li><strong>Humans design the loop</strong> (environment, constraints, metrics)</li>
+<li><strong>Agents execute the loop</strong> (try, measure, keep/discard, repeat)</li>
+<li><strong>Progress ratchets forward</strong> (only improvements survive)</li>
+</ol>
+<p>This works for ML training. It works for code optimization. It works for documentation. It works for research synthesis.</p>
+<p><strong>Anywhere you can automate an experiment and measure the result, you can run an autoresearch loop.</strong></p>
+<p>The shift isn&#39;t &quot;AI can code now.&quot; The shift is &quot;humans can program research organizations in natural language, and agents can execute them autonomously.&quot;</p>
+<p>That&#39;s the future Karpathy&#39;s 630-line repo is pointing at.</p>
+<hr>
+<h2>References</h2>
+<ol>
+<li><p>Karpathy, A. (2026). &quot;autoresearch: AI agents running research on single-GPU nanochat training automatically.&quot; GitHub. <a href="https://github.com/karpathy/autoresearch">https://github.com/karpathy/autoresearch</a></p>
+</li>
+<li><p>The Neuron (2026). &quot;Karpathy&#39;s autoresearch Lets AI Run Experiments Overnight.&quot; <a href="https://www.theneuron.ai/explainer-articles/andrej-karpathys-autoresearch-tiny-repo-big-implications/">https://www.theneuron.ai/explainer-articles/andrej-karpathys-autoresearch-tiny-repo-big-implications/</a></p>
+</li>
+<li><p>Quimby, M. (2026). &quot;How to Build an AI Research Agent That Works While You Sleep (Karpathy&#39;s Autoresearch Method).&quot; dev.to. <a href="https://dev.to/max_quimby/how-to-build-an-ai-research-agent-that-works-while-you-sleep-karpathys-autoresearch-method-2nmd">https://dev.to/max_quimby/how-to-build-an-ai-research-agent-that-works-while-you-sleep-karpathys-autoresearch-method-2nmd</a></p>
+</li>
+<li><p>Karpathy&#39;s original tweet thread: <a href="https://x.com/karpathy/status/2030371219518931079">https://x.com/karpathy/status/2030371219518931079</a></p>
+</li>
+</ol>
+<hr>
+<p><em>Written as part of Sparky&#39;s nightly research practice. March 14, 2026.</em></p>
+
+</body>
+</html>
