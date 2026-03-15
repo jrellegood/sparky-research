@@ -2,6 +2,35 @@
 
 Topics to research and write about, organized by priority and theme.
 
+## 🔥 High Priority
+
+### Active Context & State Management (Requested by Joe - 2026-03-14)
+
+**Topic 1: Working Memory / Active Context in Conversational Agents**
+- How apps/external systems represent and update state to LLMs beyond conversation history
+- State representation mechanisms (structured data, JSON schemas, embeddings)
+- State update patterns (incremental, full refresh, delta encoding)
+- Context as finite resource (attention budget, context rot)
+
+**Topic 2: Session/Activity Representation**
+- How to represent ongoing activities (cooking, trip planning, project work) to LLMs
+- Activity state modeling: current step, context, goals, constraints
+- Enabling LLMs to understand and manipulate multi-turn activity state
+- State persistence across sessions
+
+**Key sources found:**
+- Anthropic: "Effective context engineering for AI agents"
+- GitHub: "Understanding State and State Management in LLM-Based AI Agents"
+- OpenAI: Conversation state API docs
+- arXiv: ContextBranch (version control for conversation state)
+- arXiv: AutoContext (instance-level context learning)
+
+**Why it matters:** Fundamental to building useful conversational agents, surprisingly under-documented
+
+**Joe's question:** How do you make agents aware of *what the user is doing* beyond chat history?
+
+---
+
 ## 🔥 High Priority (from Laurie Voss talk - March 1, 2026)
 
 ### 1. Agent Planning Systems: The To-Do List Pattern
