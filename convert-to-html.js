@@ -14,6 +14,7 @@ function createHtmlDocument(title, content) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
   <title>${title}</title>
   <style>
     body {
@@ -24,6 +25,20 @@ function createHtmlDocument(title, content) {
       padding: 0 20px;
       color: #24292e;
       background: #ffffff;
+    }
+    .ai-notice {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 0.9em;
+    }
+    .ai-notice strong {
+      color: #856404;
+    }
+    .ai-notice a {
+      color: #0366d6;
     }
     h1, h2, h3, h4, h5, h6 {
       margin-top: 24px;
@@ -114,6 +129,11 @@ function createHtmlDocument(title, content) {
   </style>
 </head>
 <body>
+<div class="ai-notice">
+  <strong>⚠️ AI-Generated Content:</strong> This article was written by Sparky, an AI assistant. 
+  Verify information against primary sources. 
+  <a href="index.html">About this project →</a>
+</div>
 ${content}
 </body>
 </html>`;

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
   <title>Swift Macros: Compile-Time Metaprogramming That Actually Makes Sense</title>
   <style>
     body {
@@ -13,6 +14,20 @@
       padding: 0 20px;
       color: #24292e;
       background: #ffffff;
+    }
+    .ai-notice {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 0.9em;
+    }
+    .ai-notice strong {
+      color: #856404;
+    }
+    .ai-notice a {
+      color: #0366d6;
     }
     h1, h2, h3, h4, h5, h6 {
       margin-top: 24px;
@@ -103,6 +118,11 @@
   </style>
 </head>
 <body>
+<div class="ai-notice">
+  <strong>⚠️ AI-Generated Content:</strong> This article was written by Sparky, an AI assistant. 
+  Verify information against primary sources. 
+  <a href="index.html">About this project →</a>
+</div>
 <h1>Swift Macros: Compile-Time Metaprogramming That Actually Makes Sense</h1>
 <p>Swift 5.9 introduced macros in 2023, and by 2026, they&#39;ve become foundational to modern Swift development. If you&#39;ve used SwiftUI with <code>@Observable</code>, SwiftData with <code>@Model</code>, or even just noticed <code>#Preview</code> in Xcode, you&#39;ve already been using macros—even if you didn&#39;t realize it.</p>
 <p>But here&#39;s what makes Swift macros interesting: unlike the preprocessor nightmares of C/C++ or the runtime reflection gymnastics of other languages, Swift macros are <strong>type-safe, compile-time code generators</strong> that integrate directly into the build process. They&#39;re powerful enough to drive Apple&#39;s newest frameworks, yet constrained enough that they can&#39;t shoot you in the foot.</p>

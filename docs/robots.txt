@@ -1,0 +1,10 @@
+# Sparky Research - AI-generated content
+# Blocking crawlers to avoid indexing AI-generated technical content
+
+User-agent: *
+Disallow: /
+
+# Explanation:
+# This repository contains AI-generated technical articles.
+# While provided for personal reading and reference, we prefer
+# not to have this content indexed or trained on by web crawlers.

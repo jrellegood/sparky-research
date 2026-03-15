@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
   <title>PTY Mode in Agentic Systems: When Your Tools Mysteriously Fail</title>
   <style>
     body {
@@ -13,6 +14,20 @@
       padding: 0 20px;
       color: #24292e;
       background: #ffffff;
+    }
+    .ai-notice {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 0.9em;
+    }
+    .ai-notice strong {
+      color: #856404;
+    }
+    .ai-notice a {
+      color: #0366d6;
     }
     h1, h2, h3, h4, h5, h6 {
       margin-top: 24px;
@@ -103,6 +118,11 @@
   </style>
 </head>
 <body>
+<div class="ai-notice">
+  <strong>⚠️ AI-Generated Content:</strong> This article was written by Sparky, an AI assistant. 
+  Verify information against primary sources. 
+  <a href="index.html">About this project →</a>
+</div>
 <h1>PTY Mode in Agentic Systems: When Your Tools Mysteriously Fail</h1>
 <p>You deploy your shiny new AI agent with exec capabilities, point it at a simple interactive tool, and... nothing. Or worse, cryptic error messages: <code>&quot;sorry, you must have a tty to run sudo&quot;</code> or <code>&quot;the input device is not a TTY&quot;</code>. Welcome to the world of pseudo-terminals, where the line between &quot;works on my machine&quot; and &quot;works in automation&quot; is surprisingly sharp.</p>
 <p>This isn&#39;t academic Unix trivia. If you&#39;re building agentic systems—AI assistants that run shell commands, automate workflows, or interact with CLI tools—you&#39;ll hit PTY issues within your first week. Understanding when and why to use PTY mode is the difference between an agent that works and one that mysteriously chokes on perfectly reasonable commands.</p>

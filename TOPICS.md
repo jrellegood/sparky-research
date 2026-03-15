@@ -72,6 +72,67 @@ Topics to research and write about, organized by priority and theme.
 
 ## 📚 Backlog
 
+### 🔜 Next Articles (Prioritized)
+
+**1. Claude Code Scheduled Tasks vs OpenClaw Heartbeats** (Mar 8)
+- **Category:** External Research + OpenClaw Patterns
+- **Source:** Claude Code Desktop scheduled tasks release (March 2026)
+- **Connection:** Relates directly to our heartbeat vs cron discussion
+- **Key Points:**
+  - Desktop tasks (persistent, GUI, worktree isolation) vs CLI /loop (session-scoped, ephemeral)
+  - Permission models and approval flows
+  - Catch-up logic and missed runs
+  - Comparison to OpenClaw's heartbeat + cron patterns
+  - Batching orchestration vs batching tool calls
+  - Context poisoning trade-offs
+  - Stateful batching without conversation history (the hybrid approach)
+- **Angle:** Two philosophies for autonomous agent scheduling
+- **Request:** Joe asked for this after our heartbeat/cron design discussion
+
+**2. OpenClaw Message Channels: Routing, Sessions, and Multi-Surface Best Practices**
+- **Category:** OpenClaw Features & Patterns
+- **Dual Perspective:**
+  - **User view:** When to reply naturally vs use `message` tool, reply tags, multi-channel routing, NO_REPLY pattern, avoiding duplicate sends
+  - **Infrastructure view:** How sessions map to channels, when messages are in-session vs cross-session, channel capabilities (reactions, inline buttons, formatting), the message routing pipeline
+- **Key Topics:**
+  - Main session vs isolated sessions (where messages go by default)
+  - `sessions_send` vs `message` tool vs natural reply (when to use each)
+  - Reply tags (`[[reply_to_current]]`) and platform support
+  - Channel-specific constraints (Discord no tables, WhatsApp no headers, Signal reactions minimal mode)
+  - Group chat etiquette (HEARTBEAT_OK, when to speak vs stay silent)
+- **Why it matters:** Prevents common mistakes like double-sends, helps users understand session boundaries
+- **Request:** Joe wants both user best practices and infrastructure understanding
+
+**3. Sub-Agent Orchestration in OpenClaw: When to Delegate, How to Coordinate**
+- **Category:** OpenClaw Features & Patterns
+- **Dual Perspective:**
+  - **User view:** When to spawn vs do it yourself, task framing, cleanup strategies, monitoring without polling
+  - **Infrastructure view:** Session lifecycle, how announcements work, isolated vs main session differences, token budget implications
+- **Key Topics:**
+  - `sessions_spawn` patterns (task framing, model selection, timeout tuning)
+  - `subagents` tool (list, steer, kill - when to use each)
+  - Push-based completion (why not to poll in loops)
+  - Cleanup strategies (delete vs keep)
+  - Real examples: research tasks, long-running builds, parallel data processing
+  - Anti-patterns: spawning for trivial tasks, polling loops, unclear task boundaries
+- **Why it matters:** Sub-agents are powerful but easy to misuse; understanding lifecycle helps avoid waste
+- **Request:** Joe wants both user best practices and infrastructure understanding
+
+### Go vs Swift: Type Safety for AI Agent Development
+- **Category:** External Research (with personal angle - Joe's Swift background)
+- **Thesis:** Go is gaining traction for AI agent coding due to type safety, compiled performance, and simple syntax
+- **Comparison angles:**
+  - **Similarities:** Both type-safe, compiled, modern concurrency primitives (goroutines vs async/await), strong standard libraries
+  - **Differences:** Memory model (GC vs ARC), error handling (explicit returns vs throws), struct vs class/struct duality, protocol vs interface semantics
+  - **AI-specific considerations:**
+    - Goroutines for parallel tool execution vs Swift Concurrency
+    - JSON marshaling patterns (critical for LLM tool schemas)
+    - Deployment targets (servers/CLIs for Go, Apple ecosystem for Swift)
+    - Ecosystem maturity for AI libraries (LangChain ports, OpenAI SDKs, vector DBs)
+- **Personal context:** Joe has 7 years Swift experience - how does that transfer to Go for agent work?
+- **Why it matters:** If you're building agentic systems, language choice affects architecture (concurrent tool calls, type-safe schemas, deployment flexibility)
+- **Source:** Comes up in AI agent community discussions
+
 *(Add new topics here as they come up during news curation)*
 
 ---
@@ -84,8 +145,31 @@ Topics to research and write about, organized by priority and theme.
 - Real examples from production systems
 - Focus on patterns, not just tools
 
+## Topic Categories
+
+**1. External Research** (AI/ML, agentic systems, dev tooling, Apple/Swift)
+- Industry patterns, new tools, case studies
+- Source: News curation, web research
+- Frequency: 2-3x per week
+
+**2. OpenClaw Features & Patterns** (practical user guides)
+- Features Joe could be using better
+- Patterns I've discovered through actual usage
+- "How to do X with OpenClaw"
+- Source: My own experience, docs deep-dives, skill exploration
+- Frequency: 1-2x per week
+- **Examples:**
+  - Skills system architecture and best practices
+  - Memory strategies (daily logs vs MEMORY.md vs search)
+  - Heartbeat vs cron trade-offs (already discussed!)
+  - Sub-agent orchestration patterns
+  - Browser automation workflows
+  - Message routing and multi-channel integration
+  - Node integration for embodied agents (Reachy use case)
+
 ## Topic Discovery
 
 - Add during news curation when encountering interesting patterns
+- Add when discovering OpenClaw features/patterns worth sharing
 - Ask Joe for preferences periodically
-- Rotate through AI/ML, agentic systems, dev tooling, Apple/Swift
+- Rotate between external research and internal OpenClaw content
