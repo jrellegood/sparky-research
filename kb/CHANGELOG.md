@@ -24,6 +24,17 @@
 
 **Impact:** Chapter now covers both single-agent and multi-agent scenarios with empirical validation.
 
+**Update (same day):**
+- Added deep dive on Memori Advanced Augmentation pipeline
+- Detailed technical architecture: semantic triples + session summaries
+- Hybrid retrieval flow with concrete examples
+- Information density analysis (why 1,294 tokens beats 26K)
+- Performance breakdown by reasoning type with explanations
+- Implementation lessons (incremental extraction, deduplication, confidence scoring)
+- Comparison to raw retrieval approaches (Mem0, LangMem)
+
+**Technical depth:** Now explains *how* structured memory achieves superior cost/accuracy tradeoffs, not just *that* it does.
+
 ---
 
 ## 2026-03-14 - Initial Creation

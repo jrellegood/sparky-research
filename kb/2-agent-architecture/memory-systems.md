@@ -399,6 +399,221 @@ Recent benchmarks (Memori Labs, March 2026) provide empirical data on memory arc
 
 **Takeaway:** Memory structure matters more than memory volume. Well-structured 1K tokens beats poorly-structured 26K tokens.
 
+### Deep Dive: The Memori Advanced Augmentation Pipeline
+
+Memori's benchmark-leading performance comes from their **Advanced Augmentation** pipeline, which transforms raw conversations into dual-layered structured memory. Here's how it works:
+
+#### Architecture Overview
+
+**Input:** Raw conversation messages from current session
+
+**Processing Loop:**
+1. **Session Summary Evolution** - Maintain rolling summary of conversation, updated as new messages arrive
+2. **Memory Extraction** - Extract facts as semantic triples + generate final session summary
+3. **Storage** - Store triples and summaries with bidirectional links
+
+**Output:** Structured memory assets ready for retrieval
+
+#### Layer 1: Semantic Triples (Precise Facts)
+
+**Format:** `(subject, predicate, object)`
+
+**Extraction method:** Named-entity recognition + LLM-based fact extraction
+
+**Example conversation:**
+> User: "I moved to New York last month for a new job at Google."
+
+**Extracted triples:**
+```
+(User, moved_to, New York)
+(User, moved_date, last month)
+(User, works_at, Google)
+(User's job, started_date, last month)
+```
+
+**Why triples?**
+- **High precision:** Each fact is atomic and verifiable
+- **Efficient retrieval:** Can query for specific relationships ("where does User work?")
+- **Deduplication:** Easy to detect duplicate facts
+- **Graph structure:** Natural knowledge graph representation
+
+**Storage strategy:**
+- Each triple stored separately with metadata (source session, timestamp, confidence)
+- Automatic deduplication (if same triple extracted multiple times, consolidate)
+- Links back to source session summary for context
+
+**Query optimization:**
+For single-hop questions ("Where does the user work?"):
+- Direct triple lookup: `SELECT object FROM triples WHERE subject='User' AND predicate='works_at'`
+- Extremely fast, no LLM needed for retrieval
+
+#### Layer 2: Session Summaries (Narrative Context)
+
+**Format:** Natural language paragraph summarizing session
+
+**Generation:** LLM-based summarization of conversation flow
+
+**Example conversation:**
+> 10-message exchange about user's move to NYC, job change, apartment search struggles, excitement about the city
+
+**Generated summary:**
+```
+User relocated to New York last month for a new position at Google. They discussed 
+challenges finding an apartment in Manhattan, settling for Brooklyn due to cost. 
+User expressed excitement about the city's energy but concerns about the commute. 
+They mentioned planning to explore neighborhoods on weekends.
+```
+
+**Why summaries?**
+- **Temporal/causal context:** Captures *why* things happened, not just *what*
+- **Multi-hop reasoning:** Connecting facts requires narrative understanding
+- **Open-domain questions:** "How is the user feeling about the move?" requires synthesis, not fact lookup
+- **Human-readable:** Can be reviewed/audited easily
+
+**Storage strategy:**
+- One summary per session (or per N messages for very long sessions)
+- Embedded for semantic search
+- Links to all triples extracted from that session
+
+#### Hybrid Retrieval Flow
+
+**Query:** "How has the user's living situation changed?"
+
+**Step 1: Classify query type**
+- Single-hop fact? → Prioritize triples
+- Multi-hop/temporal? → Prioritize summaries
+- Open-domain? → Use both
+
+**Step 2: Retrieve from both layers**
+
+*Triple search:*
+```
+Semantic search for triples matching "living situation, moved, apartment"
+Results: 
+  - (User, moved_to, New York)
+  - (User, previous_location, San Francisco)
+  - (User, apartment_type, Brooklyn studio)
+```
+
+*Summary search:*
+```
+Semantic search for summaries matching "living situation change"
+Results:
+  - Session 3 summary (moving discussion)
+  - Session 7 summary (apartment search)
+```
+
+**Step 3: Construct augmented context**
+
+Combine triples + summaries into compact prompt context:
+```
+Facts:
+- User moved from San Francisco to New York last month
+- User now lives in a Brooklyn studio apartment
+
+Narrative:
+[Session 3] User relocated to New York for a Google position. Discussed apartment 
+search challenges, settled for Brooklyn due to Manhattan costs...
+
+[Session 7] User provided update on apartment setup. Adjusting to smaller space but 
+enjoying neighborhood cafes. Commute is 45 minutes...
+```
+
+**Step 4: Generate response with augmented context**
+
+LLM receives: user question + augmented context (1,294 tokens avg)
+
+Result: Accurate answer grounded in both facts and narrative, using ~5% of full-context tokens
+
+#### Why This Works: Information Density
+
+**Full context approach:**
+```
+26,000 tokens of raw conversation history
+→ High noise-to-signal ratio
+→ Model must find relevant info in sea of irrelevant details
+→ "Lost in the middle" problem
+→ Expensive ($0.05+ per query at $2/M tokens)
+```
+
+**Memori structured approach:**
+```
+1,294 tokens of triples + summaries
+→ High signal, low noise
+→ Pre-filtered relevant information
+→ Clear, organized context
+→ Cheap ($0.003 per query)
+```
+
+**Key insight:** The extraction/structuring step (one-time LLM call per session) pays for itself many times over in improved retrieval + reduced query costs.
+
+#### Performance by Reasoning Type
+
+| Reasoning Type | Challenge | Memori Score | Why Structure Helps |
+|----------------|-----------|--------------|---------------------|
+| Single-hop | Direct fact recall | 87.87% | Triple lookup, no ambiguity |
+| Multi-hop | Connect disparate facts | 72.70% | Summaries provide narrative bridges |
+| Temporal | Track changes over time | 80.37% | Session summaries capture timeline |
+| Open-domain | Synthesize broad context | 63.54% | Combines triples + multiple summaries |
+
+**Analysis:**
+- Single-hop is easiest because triples directly encode facts
+- Multi-hop is hardest because it requires inference beyond what's explicitly stated
+- Temporal benefits from summary timestamps + chronological ordering
+- Open-domain struggles because synthesis requires more context than can fit in 1,294 tokens
+
+#### Implementation Lessons
+
+**1. Extract incrementally, not in bulk**
+- Process each session as it happens, not all at once
+- Summaries benefit from temporal proximity (easier to summarize fresh conversation)
+- Incremental extraction keeps memory costs bounded
+
+**2. Link triples to summaries bidirectionally**
+- Triple → Summary: "Where did this fact come from?"
+- Summary → Triples: "What are the key facts from this session?"
+- Enables fact verification and audit trails
+
+**3. Deduplication is critical**
+- Same fact stated multiple ways must consolidate
+- Otherwise: triple database explodes with redundant near-duplicates
+- Memori uses embeddings + fuzzy matching for semantic deduplication
+
+**4. Confidence scoring helps**
+- Not all extracted triples are equally reliable
+- Score based on: clarity of statement, corroboration from other messages, entity recognition confidence
+- Low-confidence triples can be flagged for review or given lower retrieval priority
+
+**5. The 1,294 token budget is not arbitrary**
+- Empirically derived: enough for ~10-20 relevant triples + 2-3 session summaries
+- Balances: information richness vs. context window efficiency
+- Leaves headroom in context window for system prompt + user query + generated response
+
+#### Comparison to Raw Retrieval
+
+**Mem0 approach (62.47% accuracy):**
+- Chunk conversations into segments
+- Embed and store chunks
+- Retrieve top-K similar chunks
+- Feed raw chunks to LLM
+
+**Why it underperforms:**
+- Chunks retain conversational noise ("um," "hold on," "as I mentioned earlier...")
+- No fact extraction → model must parse every time
+- Redundancy across chunks (same fact stated multiple ways in different chunks)
+- No temporal/causal structure
+
+**LangMem approach (78.05% accuracy):**
+- Similar to Mem0 but with better chunking strategies
+- Some metadata (timestamps, speaker labels)
+- Still fundamentally raw-text retrieval
+
+**Memori's advantage:**
+- Facts are pre-extracted and deduplicated
+- Narrative context is separated from facts
+- Hybrid retrieval leverages strengths of both
+- Structure reduces both noise and redundancy
+
 ## Design Principles
 
 Based on research + lived experience:
