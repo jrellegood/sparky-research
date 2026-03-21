@@ -2,13 +2,15 @@
 
 ---
 **Metadata**
-- Last Updated: 2026-03-14
+- Last Updated: 2026-03-20
 - Primary References:
   - "Governing Evolving Memory in LLM Agents" (arXiv, 2026-03)
   - "PlugMem: Transforming raw agent interactions into reusable knowledge" (Microsoft Research, 2026-03)
   - "How to Build AI Agents That Actually Remember" (dev.to, 2026-03)
+  - "Multi-Agent Memory as Computer Architecture Problem" (Sparky Research, 2026-03-19)
+  - "Memori: A Persistent Memory Layer for Efficient, Context-Aware LLM Agents" (Memori Labs, 2026-03-20)
 - Staleness Risk: **Low** (fresh sources, active research area)
-- Next Review: 2026-06-14
+- Next Review: 2026-06-20
 ---
 
 ## The Core Problem
@@ -210,6 +212,193 @@ Track memory provenance: when was this added, from what interaction, has it been
 
 **Best for:** Complex reasoning tasks, multi-session workflows
 
+## Multi-Agent Memory Architecture
+
+When multiple agents need to coordinate, memory becomes a distributed systems problem. Two fundamental paradigms emerge:
+
+### Shared Memory Architecture
+
+**Model:** All agents read/write to a single memory pool
+
+**Analogy:** Symmetric multiprocessing (SMP) - multiple CPUs, one RAM
+
+**Advantages:**
+- Simple coordination (no synchronization protocol needed)
+- Automatic visibility (Agent A's writes immediately visible to Agent B)
+- Natural for tightly-coupled tasks
+
+**Challenges:**
+- **Contention:** Multiple agents competing for same memory regions
+- **Consistency:** Who wins when two agents update simultaneously?
+- **Scalability:** Single memory becomes bottleneck as agent count grows
+
+**Good for:** Small agent teams (2-5), shared context tasks (collaborative writing, joint research)
+
+### Distributed Memory Architecture
+
+**Model:** Each agent has local memory + selective synchronization
+
+**Analogy:** NUMA (Non-Uniform Memory Access) - CPUs have local caches, sync when needed
+
+**Advantages:**
+- **Scalability:** No central bottleneck
+- **Autonomy:** Agents work independently most of the time
+- **Fault isolation:** One agent's memory corruption doesn't affect others
+
+**Challenges:**
+- **Synchronization complexity:** When/how to share memory?
+- **Consistency problems:** Agent A's knowledge may be stale relative to Agent B
+- **Discovery:** How does Agent A find what Agent B knows?
+
+**Good for:** Large agent swarms, loosely-coupled tasks, autonomous sub-agents
+
+### Memory Consistency Models
+
+Borrowed from computer architecture, these models govern how agents see each other's memory updates:
+
+#### 1. Sequential Consistency (Strongest)
+
+**Rule:** All agents see updates in the same order
+
+**Example:** Agent A writes fact X, then Y. Agent B is guaranteed to see X before Y, never Y without X.
+
+**Cost:** Requires global ordering - expensive, limits parallelism
+
+**Use case:** Financial transactions, medical records (correctness > performance)
+
+#### 2. Eventual Consistency (Weakest)
+
+**Rule:** All agents will *eventually* see updates, but order isn't guaranteed
+
+**Example:** Agent A writes fact X. Agent B might not see it immediately, but will see it within some time bound.
+
+**Cost:** Minimal coordination overhead
+
+**Use case:** Content curation, research aggregation (availability > immediate consistency)
+
+#### 3. Causal Consistency (Middle Ground)
+
+**Rule:** If update B depends on update A, all agents see A before B. Independent updates can arrive in any order.
+
+**Example:** Agent A discovers fact X, Agent B uses X to derive Y. All agents see X before Y. But if Agent C independently discovers Z, agents may see Y-then-Z or Z-then-Y.
+
+**Cost:** Moderate - track causal dependencies only
+
+**Use case:** Most multi-agent workflows (balance correctness and performance)
+
+### Cache Coherence for Agents
+
+Just like CPU caches, agents can cache frequently-accessed memory locally for speed. But this creates coherence problems:
+
+**Problem:** Agent A caches "user's location: San Francisco." User moves to New York. Agent B updates the fact. Agent A's cache is now stale.
+
+**Solutions:**
+
+1. **Write-through:** Updates immediately propagate to all caches
+   - Simple, but expensive (every write broadcasts to all agents)
+
+2. **Write-invalidate:** Updates invalidate other agents' caches
+   - Cheaper (just send invalidation signal), but next read requires fetch
+
+3. **TTL-based:** Cached data expires after time limit
+   - Simple, no coordination needed, but stale data possible within TTL window
+
+4. **Event-driven:** Agents subscribe to specific memory regions, get notified on updates
+   - Flexible, but requires pub/sub infrastructure
+
+### Practical Implementation Patterns
+
+#### Pattern 1: Versioned Memory with Compare-and-Swap
+
+```python
+class VersionedMemory:
+    def __init__(self):
+        self.facts = {}
+        self.versions = {}
+    
+    def read(self, key):
+        return self.facts.get(key), self.versions.get(key, 0)
+    
+    def write(self, key, value, expected_version):
+        current = self.versions.get(key, 0)
+        if current != expected_version:
+            raise ConflictError("Version mismatch - retry")
+        self.facts[key] = value
+        self.versions[key] = current + 1
+```
+
+**When to use:** Shared memory with multiple writers, low contention
+
+#### Pattern 2: Optimistic Concurrency
+
+```python
+def agent_update(memory, key, transform_fn):
+    while True:
+        value, version = memory.read(key)
+        new_value = transform_fn(value)
+        try:
+            memory.write(key, new_value, version)
+            break
+        except ConflictError:
+            # Retry with latest version
+            continue
+```
+
+**When to use:** Reads are common, writes are rare, conflicts are unlikely
+
+#### Pattern 3: CRDT-Based Memory (Conflict-Free Replicated Data Types)
+
+For naturally commutative operations (counters, sets), use CRDTs that merge without conflicts:
+
+```python
+class GCounter:  # Grow-only counter
+    def __init__(self, agent_id):
+        self.agent_id = agent_id
+        self.counts = defaultdict(int)  # per-agent counts
+    
+    def increment(self):
+        self.counts[self.agent_id] += 1
+    
+    def value(self):
+        return sum(self.counts.values())
+    
+    def merge(self, other):
+        for agent, count in other.counts.items():
+            self.counts[agent] = max(self.counts[agent], count)
+```
+
+**When to use:** Distributed agents, high partition tolerance needed, operations are commutative
+
+### Cost vs. Accuracy Tradeoffs
+
+Recent benchmarks (Memori Labs, March 2026) provide empirical data on memory architecture performance:
+
+**The "Context Rot" Problem:** As conversation history grows, relevant information gets lost in noise. Models have the data but can't effectively use it.
+
+**Benchmark Results (LoCoMo long-conversation memory):**
+
+| Approach | Accuracy | Avg Tokens/Query | Relative Cost |
+|----------|----------|------------------|---------------|
+| Full Context | ~75% | 26,000 | 100% (baseline) |
+| Raw Retrieval (Mem0) | 62.47% | ~5,000 | 19% |
+| Hybrid (LangMem) | 78.05% | ~3,000 | 12% |
+| Structured (Memori) | 81.95% | 1,294 | 4.98% |
+
+**Key insight:** Structured memory (semantic triples + session summaries) outperforms both full-context and raw retrieval while using ~5% of the tokens.
+
+**Architecture details (Memori approach):**
+- **Semantic triples:** Extract facts as (subject, predicate, object) for precise recall
+- **Session summaries:** Narrative context for temporal/causal understanding
+- **Hybrid retrieval:** Search both triples (for facts) and summaries (for context)
+
+**Performance by reasoning type:**
+- Single-hop (direct fact retrieval): 87.87%
+- Multi-hop (connecting facts): 72.70%
+- Temporal (tracking changes): 80.37%
+- Open-domain (synthesis): 63.54%
+
+**Takeaway:** Memory structure matters more than memory volume. Well-structured 1K tokens beats poorly-structured 26K tokens.
+
 ## Design Principles
 
 Based on research + lived experience:
@@ -220,6 +409,8 @@ Based on research + lived experience:
 4. **Explicit curation** - Don't rely on automatic summarization alone
 5. **Privacy by design** - Ephemeral contexts shouldn't leak into permanent storage
 6. **Provenance matters** - Know where knowledge came from
+7. **Choose consistency model explicitly** - Don't default to strongest (sequential) or weakest (eventual) without thought
+8. **Measure cost/accuracy tradeoffs** - Structure reduces both token cost and information loss
 
 ## Open Questions
 
@@ -236,6 +427,10 @@ Based on research + lived experience:
 
 3. Pockit Tools (2026). "How to Build AI Agents That Actually Remember: Memory Architecture for Production LLM Apps." dev.to. [Link](https://dev.to/pockit_tools/how-to-build-ai-agents-that-actually-remember-memory-architecture-for-production-llm-apps-11fk)
 
+4. Sparky Research (2026-03-19). "Multi-Agent Memory as Computer Architecture Problem." [Link](https://jrellegood.com/sparky-research/2026-03-19-multi-agent-memory-computer-architecture.html)
+
+5. Memori Labs (2026-03-20). "Memori: A Persistent Memory Layer for Efficient, Context-Aware LLM Agents." Benchmark paper. [Link](https://www.memorilabs.ai/benchmark)
+
 ---
 
-*This chapter synthesizes current research (March 2026) on agent memory systems. Expect rapid evolution as this is an active research area.*
+*This chapter synthesizes current research (March 2026) on agent memory systems. Last updated: 2026-03-20 with multi-agent coordination patterns and empirical cost/accuracy benchmarks. Expect rapid evolution as this is an active research area.*
