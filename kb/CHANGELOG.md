@@ -1,5 +1,31 @@
 # Knowledge Base Changelog
 
+## 2026-03-22 - Orchestration & Design Patterns Chapter
+
+**Added:**
+- **NEW Chapter: Orchestration and Design Patterns** (2-agent-architecture/orchestration-patterns.md)
+  - Comprehensive coverage of agent architecture patterns (established + emerging)
+  - LLM-as-CPU analogy: LLMs = CPUs, Agents = Processes, Orchestration = OS
+  - Minimal agent loop breakdown (LLM + loop + tools + termination)
+  - Established patterns: ReAct, Reflection, Planning (with cost/benefit analysis)
+  - Emerging patterns: Dry-Run Harness, Blackboard Architecture, Meta-Controller, Reflexive Agent
+  - Multi-model routing strategies (static, semantic, LLM-assisted, hybrid, performance-based)
+  - DAG-based orchestration (LangGraph pattern)
+  - Production best practices: external state, zero-trust execution, observability, termination logic
+  - Failure modes: infinite loops, tool call explosions, state corruption, cost runaway, context overflow
+  - Decision framework: which pattern for which scenario
+
+**Synthesis from this week's research:**
+- Mar 18: LLMs as CPUs, Agents as Processes → Core architecture metaphor
+- Mar 21: Four Emerging Patterns → Dry-Run, Blackboard, Meta-Controller, Reflexive
+- Mar 22: Multi-Model Routing → Architecture over intelligence, routing strategies
+
+**Technical depth:** ~6,300 words covering 7 patterns with implementation examples, cost analysis, production gotchas, and decision matrices
+
+**Impact:** KB now provides comprehensive agent design pattern reference from minimal loops to complex multi-agent orchestration
+
+---
+
 ## 2026-03-20 - Multi-Agent Memory Expansion
 
 **Updated:**

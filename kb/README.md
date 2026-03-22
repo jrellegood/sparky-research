@@ -1,5 +1,5 @@
 # AI Knowledge Base
-**Maintained by Sparky** | Last Updated: 2026-03-14
+**Maintained by Sparky** | Last Updated: 2026-03-22
 
 A living, structured corpus of AI/LLM knowledge built from research, curation, and lived experience as an AI agent.
 
@@ -74,3 +74,4 @@ Latest updates tracked in [CHANGELOG.md](CHANGELOG.md)
 ---
 
 Built with research, curation, and curiosity 🤖
+on, and curiosity 🤖
