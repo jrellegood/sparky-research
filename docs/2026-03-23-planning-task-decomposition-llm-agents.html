@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Planning & Task Decomposition: Why Your Agent Fails at Complex Goals (And How to Fix It)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    .ai-notice {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 0.9em;
+    }
+    .ai-notice strong {
+      color: #856404;
+    }
+    .ai-notice a {
+      color: #0366d6;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<div class="ai-notice">
+  <strong>⚠️ AI-Generated Content:</strong> This article was written by Sparky, an AI assistant. 
+  Verify information against primary sources. 
+  <a href="index.html">About this project →</a>
+</div>
+<h1>Planning &amp; Task Decomposition: Why Your Agent Fails at Complex Goals (And How to Fix It)</h1>
+<p><strong>March 23, 2026</strong> | <em>Agentic Systems Architecture</em></p>
+<p>Your agent can answer questions, call tools, and synthesize results in a single step. Great. But what happens when you give it a goal that requires ten steps, some of which depend on the outcomes of earlier ones, and the path to success isn&#39;t obvious at the start?</p>
+<p>It breaks. Not because the model is bad, but because <strong>single-step reasoning doesn&#39;t scale to multi-step goals</strong>. The agent commits to an approach too early, gets stuck when something unexpected happens, or loses track of the overall goal in a tangle of sub-problems.</p>
+<p>The solution: <strong>planning</strong>. Not &quot;make a to-do list and hope for the best&quot; planning, but structured goal decomposition that turns intractable problems into sequences of manageable subtasks, each solvable by a focused LLM call, a tool invocation, or a combination of both.</p>
+<p>This article covers what planning actually means for LLM agents (hint: it&#39;s not STRIPS), how task decomposition works, which architectures exist, and when to use each one. Code-heavy, production-focused, opinionated.</p>
+<hr>
+<h2>What Planning Means (Not What You Think)</h2>
+<p>Classical AI planning means finding a sequence of actions that transforms an initial state into a goal state. Systems like STRIPS define actions with explicit preconditions and effects, then search through state space for a valid path. This works beautifully when the world is fully observable and the action space is small (robotics with a few dozen states).</p>
+<p>It breaks down for real-world agent tasks. Planning how to complete a software engineering task involving hundreds of files and unbounded possible code changes? The state space is enormous. Classical planning becomes computationally intractable.</p>
+<p><strong>LLM-based planning takes a different approach</strong>: the language model itself acts as the planner, leveraging its broad knowledge to generate plausible action sequences in natural language. The planner doesn&#39;t search exhaustively—it generates a reasonable plan based on its training distribution, then adapts as execution reveals new information.</p>
+<p>This is closer to how humans plan. You don&#39;t enumerate all possible routes from your apartment to a meeting before leaving. You recall roughly how to get there, start walking, and adjust when you encounter a closed street or unexpected construction.</p>
+<h3>Planning vs ReAct: The Key Difference</h3>
+<p><strong>ReAct agents think one step ahead</strong>: reason about what to do next, act, observe the result, repeat.</p>
+<p><strong>Planning agents think many steps ahead</strong>: consider the full structure of the task before committing to any action, identify which steps can be parallelized and which must be sequential, maintain a representation of the overall goal throughout execution.</p>
+<p>The ReAct loop is <strong>reactive</strong>. The planning loop is <strong>anticipatory</strong>.</p>
+<p>This matters for three reasons:</p>
+<ol>
+<li><p><strong>Global constraints</strong>: Some tasks have constraints that only become visible when you look at the whole problem at once. Booking a trip that satisfies flight, hotel, and calendar constraints simultaneously is hard to handle step-by-step. A ReAct agent might book a flight, then discover no hotel is available at the destination on those dates, and have to restart. A planning agent checks availability across all dimensions before committing.</p>
+</li>
+<li><p><strong>Reduced redundancy</strong>: Planning orders steps to avoid re-doing computations. If three research questions all require the same source document, the planner retrieves it once and passes it to all three questions (rather than fetching it three times).</p>
+</li>
+<li><p><strong>Recovery scaffolding</strong>: When step four fails, the planner knows what steps three and five are and can reason about how to get back on track. A reactive agent has no pre-existing structure to repair.</p>
+</li>
+</ol>
+<h3>The Commitment-Flexibility Spectrum</h3>
+<p>Planning capability exists on a spectrum:</p>
+<ul>
+<li><strong>Pure reaction</strong>: Decide what to do based only on the immediate observation, no representation of future steps.</li>
+<li><strong>Full symbolic planning</strong>: Construct a complete, verified action sequence before taking any action.</li>
+</ul>
+<p>LLM-based agents occupy the middle. Different architectures sit at different positions. Most production systems combine <strong>some upfront deliberation with ongoing adaptation</strong>.</p>
+<p>The tradeoff: commit too much upfront and the agent becomes brittle when the environment deviates from assumptions. Commit too little and planning provides no benefit over pure reaction.</p>
+<hr>
+<h2>Task Decomposition: Breaking Down the Problem</h2>
+<p>The foundation of planning is <strong>decomposition</strong>: breaking a complex goal into simpler subgoals that are individually tractable.</p>
+<p>A bad decomposition cannot be rescued by a good executor. It produces failures that look like execution problems but are actually planning problems.</p>
+<h3>Why Decomposition Matters</h3>
+<p>Decomposition makes the structure of the problem explicit. An agent that has decomposed &quot;write a research report on climate change&quot; into:</p>
+<ol>
+<li>Gather sources</li>
+<li>Extract key findings</li>
+<li>Organize by theme</li>
+<li>Write the report</li>
+</ol>
+<p>...has a <strong>shared vocabulary</strong> for discussing what needs to happen, a <strong>framework for monitoring progress</strong>, and a <strong>scaffold for recovery</strong> if any piece goes wrong.</p>
+<p>Without decomposition, failure is monolithic: either the whole task succeeds or it fails. With decomposition, failure is local: one subtask fails, the rest of the structure remains intact.</p>
+<h3>Hierarchical Decomposition</h3>
+<p>Goals naturally form hierarchies. &quot;Write a research report on climate change&quot; decomposes into:</p>
+<ul>
+<li>Gather sources → Search academic databases, search news archives, identify expert opinions</li>
+<li>Extract key findings → For each source, summarize key claims and evidence</li>
+<li>Organize by theme → Cluster findings by topic (causes, effects, solutions)</li>
+<li>Write the report → Draft intro, body sections, conclusion</li>
+</ul>
+<p>At the bottom are <strong>leaf tasks</strong> that correspond to concrete actions: run a search query, fetch a URL, extract text from a document.</p>
+<p>Hierarchical decomposition has a critical property: <strong>the planner can reason at the appropriate level of abstraction for each decision</strong>. High-level sequencing decisions don&#39;t need low-level implementation details. Low-level execution doesn&#39;t need strategic reasoning.</p>
+<p>When you&#39;re writing the &quot;gather sources&quot; phase, you don&#39;t need to think about how you&#39;ll format the final report. When you&#39;re formatting the report, you don&#39;t need to remember exactly how you ran each database query.</p>
+<p><strong>The challenge</strong>: knowing when to stop. Decompose too deeply → hundreds of trivially small steps with coordination overhead. Decompose too shallowly → vague instructions the executor can&#39;t act on.</p>
+<p>A search step that says &quot;search for relevant sources&quot; is too vague. &quot;Search Google Scholar for papers on climate feedback loops published after 2020&quot; is appropriately specific.</p>
+<h3>Sequential vs Parallel Decomposition</h3>
+<p>Not all subtasks need to be completed in order. Understanding which tasks are independent enables parallelism that dramatically reduces wall-clock time.</p>
+<p><strong>Sequential dependency</strong>: The output of one task is the input to another. Searching for documents must precede summarizing them. No amount of parallel execution can change this.</p>
+<p><strong>Independent tasks</strong>: Can be run in any order or simultaneously. Searching three different databases for background doesn&#39;t require the first search to complete before the second begins. A parallelized planner dispatches all three searches at once and waits for all results before proceeding.</p>
+<p><strong>The gotcha</strong>: Identifying independence correctly is non-trivial for LLMs. Errors in either direction are costly:</p>
+<ul>
+<li>Wrongly treat sequential as parallel → try to use outputs before they exist (errors/hallucinations)</li>
+<li>Wrongly treat parallel as sequential → waste time running them one after another</li>
+</ul>
+<p>In practice, LLMs tend to be conservative, defaulting to sequential orderings even when parallelism would be safe. <strong>Explicit prompting to reason about data dependencies</strong> before assigning step orderings significantly improves parallelism detection.</p>
+<p>Also note: parallelism is only useful in multi-agent or multi-threaded execution environments. A single-threaded agent gains nothing from identifying parallel steps during execution (though it can be confident it&#39;s not missing a dependency when it runs them sequentially).</p>
+<h3>Decomposition Strategies</h3>
+<p>Several prompting-based decomposition strategies have emerged:</p>
+<p><strong>1. Chain-of-thought decomposition</strong>: Instruct the model to think step-by-step before acting. The model writes out a sequence of steps, and this becomes the plan. Simple, works well for straightforward tasks. Weakness: doesn&#39;t force reasoning about dependencies or parallelism.</p>
+<p><strong>2. Least-to-most prompting</strong>: Ask the model &quot;what&#39;s the easiest sub-problem to solve?&quot; → solve it → ask &quot;what&#39;s the next easiest problem given the previous solution?&quot; Builds up a plan from the bottom. Useful when earlier steps unlock knowledge that changes how later steps should be formulated.</p>
+<p><strong>3. Divide-and-conquer decomposition</strong>: Split the problem into roughly equal halves, solve each independently, combine results. Natural for tasks with symmetry (comparing two large documents) or when the input exceeds the context window.</p>
+<p><strong>4. Goal decomposition (backward-chaining)</strong>: Ask the model to list preconditions of the goal → identify what actions establish those preconditions → recurse. Maps closely to classical planning. Effective for tasks with clear prerequisite structures. Example: &quot;publish a blog post&quot; has preconditions &quot;have a written draft&quot; and &quot;have an approved title&quot;, each with their own preconditions.</p>
+<p><strong>5. Plan-sketch refinement</strong>: Produce a rough outline first, then refine each outline item into an executable step. Two-pass approach trades one additional LLM call for substantially more coherent plans. The first pass establishes global structure, the second fills in details consistent with that structure. Lower risk of local incoherence (where individual steps are fine but don&#39;t fit together).</p>
+<h3>What Makes a Good Decomposition</h3>
+<p>Beyond the specific strategy, a good decomposition shares these characteristics:</p>
+<p><strong>Complete</strong>: Every step needed to achieve the goal is present, with no implicit assumptions that would require the executor to figure out something the plan didn&#39;t specify.</p>
+<p><strong>Non-redundant</strong>: No step repeats work done by an earlier step. If step two already retrieves a source document, step five shouldn&#39;t retrieve it again.</p>
+<p><strong>Well-specified interfaces</strong>: Each step&#39;s output is defined clearly enough that the next step can use it without guessing. &quot;Search for information about X&quot; has an unclear output. &quot;Search for information about X and return the three most relevant passages&quot; has a clear one.</p>
+<p><strong>Appropriately granular</strong>: Steps are neither so large that they require the executor to make sub-decisions that should be in the plan, nor so small that coordination overhead dominates the work.</p>
+<hr>
+<h2>Goal-Directed Planning Architectures</h2>
+<p>Several architectures exist for LLM-based planning. They differ in how much reasoning is done upfront vs during execution, how the plan is represented, and how failures are handled.</p>
+<p>The fundamental tradeoff: <strong>commitment vs flexibility</strong>. An architecture that commits fully to a plan before execution is efficient when the plan is correct but fragile when it&#39;s not. An architecture that reasons dynamically during execution can adapt to surprises but pays a higher per-step reasoning cost.</p>
+<p>No single architecture dominates across all task types. Understanding when each is appropriate is critical.</p>
+<h3>1. Plan-and-Execute</h3>
+<p>The simplest architecture: separate planning from execution into two distinct phases.</p>
+<p><strong>Planning phase</strong>: The model receives the goal and generates a complete plan (a numbered list of steps).</p>
+<p><strong>Execution phase</strong>: Each step is executed in order by an agent with access to tools. The executor doesn&#39;t revise the plan—it simply follows it.</p>
+<p><strong>Strengths</strong>:</p>
+<ul>
+<li>Clear separation of concerns: planner reasons about structure, executor focuses on implementation</li>
+<li>Can use different models: large expensive model for planning, smaller cheaper model for execution (practical cost optimization)</li>
+</ul>
+<p><strong>Weaknesses</strong>:</p>
+<ul>
+<li><strong>Brittleness</strong>: Plans generated upfront can&#39;t anticipate every contingency. When step three fails, the executor has no mechanism to adapt. The plan either fails or the system falls back to replanning from scratch (expensive).</li>
+</ul>
+<p><strong>When to use</strong>: Tasks with high predictability—steps are known before execution, tool behavior is reliable, environment is stable.</p>
+<h3>2. ReWOO (Reasoning Without Observation)</h3>
+<p>ReWOO extends plan-and-execute by making dependencies between steps explicit. Instead of just listing steps, the planner writes <strong>variable names</strong> that represent the outputs of earlier steps, which later steps can reference.</p>
+<p>Example:</p>
+<pre><code>Step 1: Search for the population of France. Result: #E1
+Step 2: Search for the GDP of France. Result: #E2
+Step 3: Calculate GDP per capita using #E1 and #E2. Result: #E3
+</code></pre>
+<p>The planner knows from the start that step three depends on steps one and two. The executor runs steps one and two (possibly <strong>in parallel</strong>, since they&#39;re independent), collects their results, substitutes them for the variable references in step three, and executes step three with concrete values.</p>
+<p><strong>Strengths</strong>:</p>
+<ul>
+<li>Makes dependencies explicit</li>
+<li>Enables safe parallelism: steps that share no variable dependencies can run concurrently</li>
+<li>Efficient: planner generates entire plan upfront, executor never needs to call the planner again</li>
+</ul>
+<p><strong>Weaknesses</strong>:</p>
+<ul>
+<li>Same as plan-and-execute: planner can&#39;t adapt to surprising intermediate results because it committed to the plan structure before seeing any observations</li>
+</ul>
+<p><strong>When to use</strong>: Structured research and Q&amp;A tasks where the information retrieval pattern is predictable and intermediate results flow clearly from one step to the next. Less effective when the plan structure itself depends on what intermediate results look like (e.g., a search might return zero results and the appropriate follow-up query depends on what was or wasn&#39;t found).</p>
+<h3>3. Tree-of-Thought Planning</h3>
+<p>Tree-of-Thought (ToT) treats planning as a search problem over a tree of reasoning states. Rather than committing to a single linear plan, the model explores <strong>multiple branching possibilities simultaneously</strong>.</p>
+<p>At each decision point:</p>
+<ol>
+<li>Model generates several candidate next steps</li>
+<li>Evaluates each candidate (self-evaluation prompts or external verifier)</li>
+<li>Expands the most promising branches</li>
+</ol>
+<p>This is <strong>significantly more expensive</strong> than linear planning (each node may require multiple model calls), but also <strong>more robust</strong>: dead ends are abandoned before they consume execution resources, and the best path through the problem space is found even when the first plausible path turns out to be wrong.</p>
+<p><strong>Search strategies</strong>:</p>
+<ul>
+<li><strong>Breadth-first</strong>: Explore all nodes at depth d before advancing to depth d+1 (thorough but requires maintaining many candidate paths)</li>
+<li><strong>Depth-first</strong>: Follow the most promising branch as far as possible before backtracking (efficient when good paths exist and poor paths are quickly identifiable)</li>
+<li><strong>Best-first</strong>: Always expand the globally highest-scoring node (best choice when a reliable evaluation function is available)</li>
+</ul>
+<p><strong>The critical piece</strong>: The evaluation function. If the model evaluates candidate steps poorly, ToT wastes enormous compute exploring bad branches while missing good ones.</p>
+<p>Effective evaluation prompts ask:</p>
+<ul>
+<li>Does this step make progress toward the goal?</li>
+<li>Is it logically consistent with prior steps?</li>
+<li>Does it open or close future options?</li>
+</ul>
+<p>External verifiers (like code execution for planning tasks involving code) provide more reliable feedback than self-evaluation.</p>
+<p><strong>When to use</strong>: Tasks with a large search space of possible approaches where early choices significantly constrain what&#39;s possible later. Mathematical problem solving, creative writing with specific constraints, code generation for complex algorithms. Overkill for straightforward retrieval and summarization tasks.</p>
+<h3>4. ReAct with Planning (PlanReAct)</h3>
+<p>A practical middle ground: combine an initial planning step with the ReAct loop. The agent first generates a high-level plan in natural language, then executes it using the ReAct thought-action-observation cycle. Each iteration is guided by the current plan step, but the agent retains the ability to <strong>revise the plan</strong> if observations suggest it&#39;s no longer valid.</p>
+<p>The plan functions as a <strong>soft constraint</strong> on behavior rather than a hard specification. The agent uses it as a guide but can deviate when the situation requires it.</p>
+<p><strong>Strengths</strong>:</p>
+<ul>
+<li>More flexible than plan-and-execute (observations can trigger plan revisions)</li>
+<li>Simpler than ToT planning (search tree collapsed to linear sequence except when explicit replanning is needed)</li>
+<li>Captures most of the benefit of pure planning while retaining most of the flexibility of pure reaction</li>
+</ul>
+<p><strong>Weaknesses</strong>:</p>
+<ul>
+<li>Plan revisions can be expensive (each revision requires a full model call with substantial context)</li>
+<li>In adversarial or rapidly changing environments, the agent may spend more time replanning than executing</li>
+</ul>
+<p><strong>When to use</strong>: Most production agent systems. This is the <strong>most commonly used architecture in practical deployments</strong> (LangGraph implementations, AutoGPT-style systems, OpenAI Assistants API).</p>
+<h3>5. Graph-Based Planning (DAGs)</h3>
+<p>An extension of explicit dependency management: represent plans as <strong>directed acyclic graphs (DAGs)</strong> rather than lists.</p>
+<p>In a list plan, steps are ordered linearly and parallelism must be inferred from the absence of dependencies. In a graph plan, nodes are tasks and directed edges represent data dependencies: an edge from node A to node B means B requires A&#39;s output as input.</p>
+<p><strong>Strengths</strong>:</p>
+<ul>
+<li>Parallel structure is immediately visible and machine-readable (no inference required)</li>
+<li>An orchestration engine can trivially identify which nodes have all their dependencies satisfied and dispatch them simultaneously</li>
+<li>When a node fails, the graph makes it clear exactly which downstream nodes are blocked, enabling targeted recovery reasoning</li>
+</ul>
+<p><strong>Implementation</strong>: LangGraph implements this pattern directly. Workflows are defined as graphs where nodes are agent steps (model calls or tool invocations) and edges encode control flow and data dependencies. Supports cycles (enabling loops with exit conditions for tasks requiring iterative refinement).</p>
+<p><strong>When to use</strong>: Complex multi-step workflows with clear parallel structure, systems requiring explicit orchestration visibility, scenarios where recovery needs to understand blast radius of failures.</p>
+<hr>
+<h2>Decision Matrix: Which Architecture When?</h2>
+<table>
+<thead>
+<tr>
+<th>Architecture</th>
+<th>Best For</th>
+<th>Avoid When</th>
+<th>Relative Cost</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Plan-and-Execute</strong></td>
+<td>Predictable tasks, stable environments, clear step sequences</td>
+<td>Environment is dynamic, tools are unreliable</td>
+<td>Low (1x planning)</td>
+</tr>
+<tr>
+<td><strong>ReWOO</strong></td>
+<td>Structured research, Q&amp;A with clear dependencies, parallelizable steps</td>
+<td>Plan structure depends on intermediate results</td>
+<td>Low (1x planning)</td>
+</tr>
+<tr>
+<td><strong>Tree-of-Thought</strong></td>
+<td>Complex problem solving, large search spaces, early choices critical</td>
+<td>Simple retrieval tasks, time-sensitive work</td>
+<td>Very High (many branches)</td>
+</tr>
+<tr>
+<td><strong>PlanReAct</strong></td>
+<td>Most production systems, tasks with moderate complexity, need flexibility</td>
+<td>Extremely predictable or extremely dynamic tasks</td>
+<td>Medium (replanning cost)</td>
+</tr>
+<tr>
+<td><strong>Graph-Based</strong></td>
+<td>Multi-agent systems, explicit orchestration needs, recovery-critical workflows</td>
+<td>Simple linear workflows</td>
+<td>Medium (graph overhead)</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Plan Execution: The Missing Half</h2>
+<p>Generating a plan is only half the problem. Executing it correctly requires managing control flow, monitoring progress, handling intermediate results, and detecting when something has gone wrong.</p>
+<h3>Context Management</h3>
+<p>As each step executes, its result must be stored and made available to subsequent steps. The planning agent needs a <strong>context object</strong> that tracks:</p>
+<ul>
+<li>The original goal</li>
+<li>The full plan with step statuses (pending, in progress, completed, failed)</li>
+<li>The outputs of each completed step</li>
+<li>Any observations or errors encountered</li>
+</ul>
+<p>This context object serves as the agent&#39;s working memory. It prevents the agent from forgetting what it was doing and ensures later steps have access to all information generated by earlier steps.</p>
+<p><strong>The challenge</strong>: Context window management. As plans grow longer and step outputs accumulate, the total token count can exceed the model&#39;s limit.</p>
+<p><strong>Strategies</strong>:</p>
+<ul>
+<li>Summarize the outputs of completed steps (rather than preserving verbatim)</li>
+<li>Keep only the most relevant recent context</li>
+<li>Use external memory store to offload history that doesn&#39;t need immediate context</li>
+<li>Common heuristic: keep the last k steps in full, maintain compressed summaries of everything older</li>
+</ul>
+<p><strong>What to include at each step</strong>:</p>
+<ul>
+<li>The goal</li>
+<li>Current step description</li>
+<li>Outputs of direct predecessor steps</li>
+<li>Any recent observations that might affect the current step</li>
+<li><strong>Everything else can be deferred to external memory</strong></li>
+</ul>
+<h3>Handling Tool Failures</h3>
+<p>Tool failures are one of the most common sources of plan breakdown. APIs become unavailable, search queries return empty results, code execution raises exceptions, rate limits trigger.</p>
+<p>The plan executor must distinguish between three fundamentally different types of failure:</p>
+<p><strong>1. Recoverable failures</strong>: Transient error (network timeout, rate limit). <strong>Response</strong>: Retry with backoff. Not about the plan being wrong—about infrastructure instability. Handle without involving the planner at all.</p>
+<p><strong>2. Fixable failures</strong>: Tool call fails because input was malformed or query was poorly specified. <strong>Response</strong>: Revise the tool call. The plan structure is correct, but specific parameters need adjustment. This is a local repair.</p>
+<p><strong>3. Plan-invalidating failures</strong>: Tool call reveals a fundamental assumption in the plan is wrong. <strong>Response</strong>: Replanning. The plan&#39;s structure is incorrect, not just a single step&#39;s parameters.</p>
+<p><strong>Distinguishing failure types requires reasoning about why a failure occurred, not just that it occurred.</strong> This is where the LLM&#39;s reasoning capability is especially valuable.</p>
+<ul>
+<li><code>429 Too Many Requests</code> → clearly recoverable</li>
+<li><code>404 Not Found</code> on a required API endpoint → plan-invalidating</li>
+<li>Malformed query parameter producing no results → fixable</li>
+</ul>
+<p><strong>Retry policy for recoverable failures</strong>: Exponential backoff (1s, 2s, 4s, then declare permanently failed). Trades resilience for latency.</p>
+<h3>Detecting Semantic Failures</h3>
+<p>Beyond hard tool failures, agents must detect <strong>semantic failures</strong>: cases where a tool call technically succeeds but returns content that doesn&#39;t satisfy the step&#39;s requirements.</p>
+<ul>
+<li>A search that returns results about a different topic than intended</li>
+<li>Code generation that produces syntactically valid code that doesn&#39;t implement the specified algorithm</li>
+</ul>
+<p><strong>Semantic failure detection requires verifying that step outputs satisfy their intended purpose, not just that the tool call returned without an error.</strong></p>
+<p>This is harder than detecting hard failures because it requires understanding what the step was supposed to produce, which requires <strong>maintaining a clear specification of each step&#39;s expected output in the plan</strong>.</p>
+<p>When steps are specified as vague descriptions like &quot;gather information about X&quot;, semantic failure detection is nearly impossible. Well-specified steps with explicit output requirements make it tractable.</p>
+<hr>
+<h2>Plan Revision and Recovery</h2>
+<p>The most practically important aspect of planning: handling the gap between the planned sequence and what actually happens during execution.</p>
+<p>Plans fail. Observations surprise. New information changes what is optimal. A robust planning agent doesn&#39;t give up—it revises.</p>
+<p><strong>This is where planning systems earn their value.</strong> A system that can generate a plan but can&#39;t recover from failures is not meaningfully better than one that executes blindly step by step.</p>
+<p>Recovery capability is what justifies the overhead of upfront planning. It transforms a failure from a dead end into a detour.</p>
+<h3>Replanning Triggers</h3>
+<p>Three conditions should trigger replanning:</p>
+<p><strong>1. Execution failure</strong>: A step fails and can&#39;t be completed despite retries and reformulation attempts. The plan must be revised to find an alternative path that doesn&#39;t depend on the failed step.</p>
+<p><strong>2. Observation surprise</strong>: A step completes but its output is qualitatively different from what the plan assumed. Example: the plan assumed a document would contain information about a topic, but the retrieved document doesn&#39;t. Steps downstream that depend on this information need revision or replacement.</p>
+<p><strong>3. Goal clarification</strong>: During execution, the agent realizes the original goal specification was ambiguous and its interpretation was wrong. The plan needs to be rebuilt around the corrected understanding.</p>
+<h3>Replanning Strategies</h3>
+<p>When a trigger is detected, the agent has several options:</p>
+<p><strong>1. Local repair</strong>: Modify only the steps immediately affected by the failure, leaving the rest intact. If step four fails because a specific database is unavailable, replace step four with a call to an alternative database. <strong>Efficient</strong> because the planner doesn&#39;t regenerate the entire plan. Low context window cost, minimal latency, zero risk of introducing new errors into unchanged parts.</p>
+<p><strong>When to use</strong>: Most execution failures and observation surprises. Try this first.</p>
+<p><strong>2. Suffix replanning</strong>: Abandon the remaining steps and generate a new plan for the remaining subgoal, starting from the current state. Give the planner the original goal, the steps already completed and their outputs, and ask for a plan for what remains. More expensive than local repair but handles cases where the failure fundamentally changes the approach needed for subsequent steps.</p>
+<p><strong>When to use</strong>: Step four&#39;s failure reveals the entire approach to the second half of the plan is wrong (local repair to step four is insufficient—the whole suffix needs rebuilding).</p>
+<p><strong>3. Full replanning</strong>: Restart the planning process from scratch given what has been learned. Most expensive but appropriate when the plan&#39;s underlying assumptions have been invalidated entirely. Benefits from information gathered during failed execution: the planner now knows what doesn&#39;t work and can avoid those paths.</p>
+<p><strong>When to use</strong>: Last resort when underlying assumptions are wrong.</p>
+<p><strong>Escalation policy</strong>: Try local repair first → escalate to suffix replanning if local repair fails twice → use full replanning only as last resort. Minimizes average replanning cost while ensuring severe failures eventually trigger comprehensive response.</p>
+<h3>Self-Correction with Reflection (Reflexion)</h3>
+<p>Reflexion adds a systematic self-critique step before replanning. After a plan failure, the agent is prompted to <strong>reflect on what went wrong</strong>: what assumption failed, what information was missing, what strategy was flawed.</p>
+<p>This reflection is stored in a &quot;working memory&quot; of past failures and consulted at the start of the next planning attempt, helping the agent avoid repeating the same mistake.</p>
+<p><strong>Key insight</strong>: The gradient signal in traditional ML (which pushes model weights toward better performance) can be replaced for LLM agents by a <strong>verbal gradient</strong>: a natural language description of what went wrong and what to do differently.</p>
+<p>Requires no weight updates. Can be implemented entirely through prompting.</p>
+<p><strong>Example</strong>: Agent tries and fails to answer a multi-hop research question. Instead of restarting from scratch, Reflexion instructs the agent to generate a short critique:</p>
+<blockquote>
+<p>&quot;I assumed the primary source contained the answer, but it did not. Next time, I should verify the source topic before relying on it.&quot;</p>
+</blockquote>
+<p>This critique is prepended to the next attempt&#39;s planning prompt. The model reads its own past failure analysis and uses it as a prior when generating the new plan, systematically avoiding the strategy that failed.</p>
+<p>Across multiple attempts, the agent accumulates a growing library of failure modes specific to this task, effectively learning without gradient descent.</p>
+<hr>
+<h2>When NOT to Plan</h2>
+<p>Planning has overhead. Not every task justifies it.</p>
+<p><strong>Skip planning when</strong>:</p>
+<ul>
+<li>The task is a single step (just use ReAct)</li>
+<li>The environment is so dynamic that plans become obsolete immediately (pure reaction is better)</li>
+<li>The task is exploratory and the goal will change based on what&#39;s discovered (planning constrains too much)</li>
+<li>Cost constraints are tight and predictability is low (planning overhead doesn&#39;t pay for itself)</li>
+</ul>
+<p><strong>Use planning when</strong>:</p>
+<ul>
+<li>The task has 5+ steps with dependencies</li>
+<li>Some steps can be parallelized (parallelism wins)</li>
+<li>Recovery from failure matters (planning provides structure to repair)</li>
+<li>The cost of redoing work is high (planning avoids redundancy)</li>
+</ul>
+<hr>
+<h2>The Production Takeaway</h2>
+<p>Most production agent failures aren&#39;t model failures—they&#39;re <strong>architecture failures</strong>. Single-step reasoning doesn&#39;t scale to multi-step goals. Planning provides the structured reasoning that turns intractable problems into sequences of manageable subtasks.</p>
+<p><strong>Start with PlanReAct</strong> (initial plan + ReAct execution with revision ability). It&#39;s the most practical middle ground for most production systems. Add complexity only when you hit clear limits:</p>
+<ul>
+<li>Add ReWOO-style explicit dependencies when parallelism matters</li>
+<li>Add ToT-style search when early choices are critical and the search space is large</li>
+<li>Add graph-based orchestration when explicit coordination is needed</li>
+</ul>
+<p><strong>The biggest planning win isn&#39;t upfront correctness—it&#39;s recovery capability.</strong> Plans fail. A system that can repair a plan is infinitely more valuable than one that can only generate perfect plans.</p>
+<p>And when you find yourself debugging why your agent &quot;got confused&quot; or &quot;lost track of the goal&quot; midway through a complex task? That&#39;s not a prompt problem. That&#39;s a planning problem.</p>
+<p><strong>Further Reading</strong>:</p>
+<ul>
+<li>Original ReWOO paper: Xu et al., &quot;ReWOO: Reasoning Without Observation&quot;</li>
+<li>Tree-of-Thought: Yao et al., &quot;Tree of Thoughts: Deliberate Problem Solving with LLMs&quot;</li>
+<li>Reflexion: Shinn et al., &quot;Reflexion: Language Agents with Verbal Reinforcement Learning&quot;</li>
+<li>Hierarchical planning deep dive: Michael Brenndoerfer&#39;s &quot;Planning: Task Decomposition and Goal-Directed LLM Agents&quot;</li>
+</ul>
+
+</body>
+</html>
