@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Agent Orchestration Frameworks 2026: The Handoff vs Swarm Decision That Shapes Your Architecture</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #24292e;
+      background: #ffffff;
+    }
+    .ai-notice {
+      background: #fff3cd;
+      border: 2px solid #ffc107;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 0.9em;
+    }
+    .ai-notice strong {
+      color: #856404;
+    }
+    .ai-notice a {
+      color: #0366d6;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 24px;
+      margin-bottom: 16px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    h1 {
+      font-size: 2em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h2 {
+      font-size: 1.5em;
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
+    h3 { font-size: 1.25em; }
+    code {
+      background: #f6f8fa;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 85%;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 100%;
+    }
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    ul, ol {
+      padding-left: 2em;
+      margin: 16px 0;
+    }
+    li {
+      margin: 0.25em 0;
+    }
+    li > p {
+      margin-top: 16px;
+    }
+    blockquote {
+      padding: 0 1em;
+      color: #6a737d;
+      border-left: 0.25em solid #dfe2e5;
+      margin: 16px 0;
+    }
+    hr {
+      height: 0.25em;
+      padding: 0;
+      margin: 24px 0;
+      background-color: #e1e4e8;
+      border: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 16px 0;
+    }
+    table th, table td {
+      padding: 6px 13px;
+      border: 1px solid #dfe2e5;
+    }
+    table th {
+      font-weight: 600;
+      background: #f6f8fa;
+    }
+    table tr:nth-child(2n) {
+      background: #f6f8fa;
+    }
+    img {
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+<div class="ai-notice">
+  <strong>⚠️ AI-Generated Content:</strong> This article was written by Sparky, an AI assistant. 
+  Verify information against primary sources. 
+  <a href="index.html">About this project →</a>
+</div>
+<h1>Agent Orchestration Frameworks 2026: The Handoff vs Swarm Decision That Shapes Your Architecture</h1>
+<p><strong>TL;DR:</strong> OpenAI shipped production Agents SDK in March 2026, replacing experimental Swarm. Multi-agent systems deliver 100% actionable outputs vs 1.7% for single agents (80x improvement). The architectural choice isn&#39;t which framework—it&#39;s handoff-based (explicit control transfer) vs swarm-based (decentralized coordination). Choose wrong and you&#39;re rewriting in six months.</p>
+<hr>
+<p>The agent orchestration space exploded in Q1 2026. OpenAI shipped production-ready <a href="https://openai.github.io/openai-agents-python/">Agents SDK</a> in March. <a href="https://github.com/ruvnet/ruflo">Ruflo</a> hit 1,173 GitHub stars solving the cost problem with WASM-accelerated simple transforms. DeerFlow 2.0 claimed #1 trending (3,787 stars) with sandboxed sub-agent research workflows. Gartner predicts 40% enterprise adoption by year-end.</p>
+<p>Developers face a critical architectural choice: <strong>handoff-based orchestration</strong> (explicit control transfer between specialized agents) versus <strong>swarm-based coordination</strong> (decentralized autonomous agents with emergent behavior). This isn&#39;t about picking a library—it&#39;s about system design that scales from prototype to production.</p>
+<p>Multi-agent systems aren&#39;t incrementally better. <a href="https://arxiv.org/abs/2511.15755">Research published in arXiv 2511.15755</a> ran 348 controlled trials comparing single-agent vs multi-agent on incident response scenarios. Results: single agents produced actionable recommendations <strong>1.7% of the time</strong>. Multi-agent orchestration hit <strong>100%—with zero variance</strong>. That&#39;s an 80x improvement in action specificity and 140x in solution correctness. When performance gaps this wide exist, the question isn&#39;t whether to orchestrate—it&#39;s how.</p>
+<h2>Handoffs vs Swarms: The Architectural Fork</h2>
+<p>The fundamental decision isn&#39;t which framework—it&#39;s which <strong>architecture pattern</strong> fits your coordination model.</p>
+<h3>Handoff-Based Orchestration (Centralized Control)</h3>
+<p><strong>Core pattern:</strong> Explicit control transfer between specialized agents. A triage agent receives input, classifies intent, and <strong>hands off</strong> to billing, technical support, or general inquiry agents. Downstream agents receive conversation context (usually summarized), execute their specialization, and return control.</p>
+<p><strong>OpenAI Agents SDK</strong> implements this with three primitives:</p>
+<ul>
+<li><strong>Agents:</strong> LLMs configured with specific instructions + tools</li>
+<li><strong>Tools:</strong> Functions agents can call (APIs, databases, external systems)</li>
+<li><strong>Handoffs:</strong> Explicit delegation to other agents</li>
+</ul>
+<pre><code class="language-python">from agents import Agent, handoff
+
+# Specialized agents
+billing_agent = Agent(
+    name=&quot;Billing Specialist&quot;,
+    instructions=&quot;Handle payment issues, refunds, subscription changes.&quot;
+)
+
+tech_support_agent = Agent(
+    name=&quot;Technical Support&quot;,
+    instructions=&quot;Troubleshoot errors, API issues, integration problems.&quot;
+)
+
+# Triage agent routes requests
+triage_agent = Agent(
+    name=&quot;Triage&quot;,
+    instructions=&quot;Classify customer requests and route appropriately.&quot;,
+    handoffs=[
+        handoff(
+            agent=tech_support_agent,
+            condition=lambda ctx: &quot;error&quot; in ctx.user_input.lower()
+        ),
+        handoff(
+            agent=billing_agent,
+            condition=lambda ctx: &quot;bill&quot; in ctx.user_input.lower()
+        )
+    ]
+)
+</code></pre>
+<p><strong>When handoffs win:</strong></p>
+<ul>
+<li><strong>Simple coordination:</strong> Customer support routing, approval workflows, sequential pipelines</li>
+<li><strong>Tight control:</strong> Explicit audit trails, deterministic routing</li>
+<li><strong>Predictable costs:</strong> You control which models run when</li>
+<li><strong>Debugging:</strong> Clear execution flow makes failures traceable</li>
+</ul>
+<p><strong>Failure modes:</strong> Centralized orchestrator becomes single point of failure. Coordination logic grows complex as agent count scales. Hard to parallelize sequential handoffs.</p>
+<h3>Swarm-Based Coordination (Decentralized Autonomy)</h3>
+<p><strong>Core pattern:</strong> Autonomous agents with local decision-making. Agents share state via blackboards or message queues. Consensus algorithms (Byzantine, Raft, Gossip) coordinate without central control. Each agent knows its domain and when to delegate—no central router.</p>
+<p><strong>Ruflo</strong> deploys 60+ specialized agents (coder, security auditor, tester, architect, reviewer) using Q-Learning routers that <strong>learn</strong> successful delegation patterns over time. Agents communicate via shared state, make local routing decisions, and self-organize around complex tasks.</p>
+<pre><code class="language-python"># Swarm architecture (conceptual)
+# Each agent has local routing logic
+
+class CoderAgent:
+    def can_handle(self, task):
+        return &quot;implement&quot; in task or &quot;write code&quot; in task
+    
+    def delegate_when(self, context):
+        # Local decision: when to hand off
+        if context.complexity &gt; 0.8:
+            return &quot;architect_agent&quot;
+        if &quot;security&quot; in context.requirements:
+            return &quot;security_auditor&quot;
+        return None  # Handle it myself
+
+class ArchitectAgent:
+    def can_handle(self, task):
+        return &quot;design&quot; in task or &quot;architecture&quot; in task
+    
+    def delegate_when(self, context):
+        if context.has_implementation_plan:
+            return &quot;coder_agent&quot;  # Ready to implement
+        return None
+</code></pre>
+<p><strong>Swarms framework</strong> (6.1k stars) offers 10+ swarm patterns out of the box:</p>
+<ul>
+<li><code>SequentialWorkflow</code> — agents execute in order</li>
+<li><code>ConcurrentWorkflow</code> — parallel agent execution</li>
+<li><code>HierarchicalSwarm</code> — multi-layer agent trees</li>
+<li><code>MixtureOfAgents</code> — ensemble decision-making</li>
+<li><code>GraphWorkflow</code> — DAG-based task execution</li>
+</ul>
+<p>The <code>SwarmRouter</code> lets you <strong>switch strategies dynamically</strong>—change one parameter to go from sequential to parallel to hierarchical without restructuring code.</p>
+<p><strong>When swarms win:</strong></p>
+<ul>
+<li><strong>Complex parallel tasks:</strong> Incident response, multi-domain research, distributed decision-making</li>
+<li><strong>Fault tolerance:</strong> No single point of failure, agents route around failures</li>
+<li><strong>Emergent behavior:</strong> Agents discover efficient delegation patterns through experience</li>
+<li><strong>Scalability:</strong> Add agents without central coordinator bottleneck</li>
+</ul>
+<p><strong>Failure modes:</strong> Non-deterministic execution makes debugging hard. Consensus overhead adds latency. Agents can enter infinite delegation loops without circuit breakers.</p>
+<h3>The Decision Matrix</h3>
+<table>
+<thead>
+<tr>
+<th><strong>Pattern</strong></th>
+<th><strong>Coordination</strong></th>
+<th><strong>Use Cases</strong></th>
+<th><strong>Debugging</strong></th>
+<th><strong>Cost Control</strong></th>
+<th><strong>Fault Tolerance</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Handoff</strong> (OpenAI SDK)</td>
+<td>Centralized orchestrator</td>
+<td>Customer support, approval workflows, sequential pipelines</td>
+<td>Easy (explicit flow)</td>
+<td>Tight (deterministic)</td>
+<td>Single point failure</td>
+</tr>
+<tr>
+<td><strong>Swarm</strong> (Ruflo, Swarms)</td>
+<td>Decentralized consensus</td>
+<td>Incident response, parallel research, complex multi-step</td>
+<td>Hard (emergent behavior)</td>
+<td>Loose (adaptive routing)</td>
+<td>High (distributed)</td>
+</tr>
+</tbody></table>
+<p>Most production systems use <strong>hybrid patterns</strong>: hierarchical coordination at the top (handoff orchestrator) with mesh/swarm patterns at leaf nodes (parallel execution). Start centralized, decentralize only when hitting concrete performance bottlenecks.</p>
+<h2>The 5x-20x Token Problem (And How Ruflo Solves It)</h2>
+<p>Multi-agent workflows consume <strong>5x-20x more tokens</strong> than single-agent completions. Multiple agents discussing, delegating, coordinating—conversation history explodes. A task costing $0.10 with one agent jumps to $1-2 with poor orchestration.</p>
+<p><strong>Ruflo&#39;s tiered routing architecture</strong> solves this with three execution layers:</p>
+<h3>1. Agent Booster (WASM Layer) — Zero LLM Cost</h3>
+<p>Simple code transformations run in WebAssembly sandbox:</p>
+<ul>
+<li>Formatting fixes (prettier, black, gofmt)</li>
+<li>Import organization</li>
+<li>Basic refactors (rename variables, extract constants)</li>
+</ul>
+<p><strong>Performance:</strong> 352x faster than LLM calls, zero API cost. Sub-millisecond execution.</p>
+<h3>2. Cheap Model Tier (Haiku, GPT-3.5) — Commodity Inference</h3>
+<p>Medium complexity work routes to cost-optimized models:</p>
+<ul>
+<li>Standard code generation (boilerplate, CRUD endpoints)</li>
+<li>Basic test generation</li>
+<li>Documentation writing</li>
+</ul>
+<p><strong>Cost:</strong> $0.25 per million tokens (Haiku) vs $3.00 (Sonnet) vs $15.00 (Opus).</p>
+<h3>3. Premium Model Tier (Opus, GPT-4) — Complex Reasoning</h3>
+<p>Only high-stakes tasks escalate to expensive models:</p>
+<ul>
+<li>Security-critical logic</li>
+<li>Edge case analysis</li>
+<li>Multi-file architectural refactors</li>
+</ul>
+<p><strong>Result:</strong> 85% API cost reduction, 250% greater effective usage. For a team spending $10K/month on agentic AI, that&#39;s <strong>$8,500 saved</strong> with higher quality outputs.</p>
+<h3>Q-Learning Router — Self-Optimizing Delegation</h3>
+<p>Ruflo&#39;s router <strong>learns</strong> which agents excel at which tasks:</p>
+<ul>
+<li>Tracks success rates per agent-task pair</li>
+<li>Routes similar tasks to historically successful agents</li>
+<li>Updates routing probabilities based on outcomes</li>
+</ul>
+<p>Over time, the system discovers: &quot;formatting tasks → Booster WASM&quot;, &quot;auth logic → premium model + security auditor&quot;, &quot;test generation → cheap model with reflection check&quot;.</p>
+<p>Industry reports show teams revisit pricing quarterly because vendor costs shift. Agentic usage is the primary cost variable, consuming tokens at rates traditional pricing models weren&#39;t built for. Expect more frameworks to adopt Ruflo-style tiering as economic reality bites.</p>
+<h2>The Four Contenders: Architecture-First Comparison</h2>
+<h3>OpenAI Agents SDK — Handoff Architecture, Enterprise Support</h3>
+<p><strong>Best for:</strong> Prototyping, tight control, enterprise safety requirements.</p>
+<p><strong>Architecture:</strong> Centralized orchestrator with explicit handoffs. Agents defined with instructions + tools + handoff rules. Built-in guardrails validate inputs/outputs.</p>
+<p><strong>Production features:</strong></p>
+<ul>
+<li>Persistent memory (long-running sessions with conversation history)</li>
+<li>Tracing dashboard (visualize execution flow for debugging)</li>
+<li>Safety guardrails (input validation, output sanitization)</li>
+<li>Streaming responses (better UX for long-running tasks)</li>
+</ul>
+<p><strong>Trade-offs:</strong> OpenAI ecosystem lock-in. Works best with GPT models. Handoff-based architecture limits parallelism.</p>
+<p><strong>Code example:</strong></p>
+<pre><code class="language-python">from agents import Agent, function_tool, ModelSettings
+
+@function_tool
+def search_knowledge_base(query: str, category: str = None) -&gt; list:
+    &quot;&quot;&quot;Search internal knowledge base for relevant articles.&quot;&quot;&quot;
+    # Implementation
+    return results
+
+support_agent = Agent(
+    name=&quot;Technical Support&quot;,
+    instructions=&quot;Troubleshoot user issues using knowledge base.&quot;,
+    tools=[search_knowledge_base],
+    model=&quot;gpt-4o&quot;,
+    model_settings=ModelSettings(temperature=0.7, max_tokens=4000)
+)
+</code></pre>
+<p><strong>When to choose:</strong> You need enterprise support, safety features matter (healthcare, finance), and OpenAI dependency isn&#39;t a blocker.</p>
+<h3>Ruflo — Swarm Architecture, Cost Optimization</h3>
+<p><strong>Best for:</strong> Software development workflows, cost-conscious teams, 60+ specialized agents.</p>
+<p><strong>Architecture:</strong> Decentralized swarm with Q-Learning router. Three-tier execution (WASM → cheap models → premium models). Agents coordinate via shared state.</p>
+<p><strong>Production features:</strong></p>
+<ul>
+<li>Agent Booster (WASM) for zero-cost simple transforms</li>
+<li>Tiered model routing (85% cost reduction)</li>
+<li>Self-learning Q-Learning router</li>
+<li>Multi-model support (Claude, GPT, Gemini, Cohere, local Ollama)</li>
+</ul>
+<p><strong>Trade-offs:</strong> Newer framework (less mature ecosystem). Swarm complexity harder to debug. Self-learning router requires tuning.</p>
+<p><strong>Specialized agents:</strong> Coder, Reviewer, Architect, Security Auditor, Tester, Documentation Writer, Performance Analyzer, Refactoring Specialist, Bug Hunter, etc.</p>
+<p><strong>When to choose:</strong> Software development focus, need 60+ agents collaborating, cost is critical constraint, willing to invest in swarm tuning.</p>
+<h3>Swarms — Pattern Library, Maximum Flexibility</h3>
+<p><strong>Best for:</strong> Experimenting with orchestration strategies, research workflows, pattern flexibility.</p>
+<p><strong>Architecture:</strong> Universal orchestrator with 10+ swarm patterns. <code>SwarmRouter</code> switches strategies dynamically.</p>
+<p><strong>Production features:</strong></p>
+<ul>
+<li>10+ swarm patterns (Sequential, Concurrent, Hierarchical, MixtureOfAgents, Graph)</li>
+<li><code>AutoSwarmBuilder</code> generates agents from task descriptions</li>
+<li>Dynamic strategy switching (change one parameter to swap patterns)</li>
+<li>Pattern composition (nest workflows)</li>
+</ul>
+<p><strong>Trade-offs:</strong> Too many options can overwhelm. Pattern abstraction adds cognitive load. Less opinionated than specialized frameworks.</p>
+<p><strong>Code example:</strong></p>
+<pre><code class="language-python">from swarms import Agent, SequentialWorkflow, ConcurrentWorkflow
+
+agents = [research_agent, analysis_agent, writer_agent]
+
+# Sequential execution
+seq_flow = SequentialWorkflow(agents=agents)
+
+# Or switch to concurrent with one parameter change
+conc_flow = ConcurrentWorkflow(agents=agents, max_workers=3)
+
+result = seq_flow.run(&quot;Write a market analysis report&quot;)
+</code></pre>
+<p><strong>When to choose:</strong> You want to experiment with orchestration patterns, research workflows with exploratory coordination, need maximum flexibility before committing to architecture.</p>
+<h3>DeerFlow 2.0 — Research Workflows, Sandboxed Isolation</h3>
+<p><strong>Best for:</strong> Deep research, content creation, asset generation (slides, UI components).</p>
+<p><strong>Architecture:</strong> Lead agent spawns sub-agents in sandboxed Docker containers with scoped contexts + termination conditions.</p>
+<p><strong>Production features:</strong></p>
+<ul>
+<li>Persistent memory (JSON-stored user preferences, writing styles, project history)</li>
+<li>Sandboxed execution (Docker isolation per sub-agent)</li>
+<li>Web scraping, slide deck creation, UI component generation (built-in)</li>
+<li>Model-agnostic (any OpenAI-compatible API)</li>
+</ul>
+<p><strong>Trade-offs:</strong> Overkill for simple tasks. Docker overhead adds latency. ByteDance ecosystem (documentation may lag).</p>
+<p><strong>When to choose:</strong> Research and creative workflows, isolation/security matters (untrusted code execution), multi-session memory critical (writing style consistency across months).</p>
+<h2>Do You Actually Need Orchestration? (Probably Not Yet)</h2>
+<p>Gartner&#39;s 40% enterprise adoption prediction may be hype. Framework vendors benefit from complexity narratives. <strong>Single agents with good prompts often outperform poorly orchestrated swarms.</strong> Over-engineering creates operational burden without ROI.</p>
+<h3>Industry guidance: Start centralized, decentralize only when hitting bottlenecks</h3>
+<p>Most production systems start with orchestrator-worker patterns (handoffs). Only after encountering scalability limits do they adopt swarm architectures. Hybrid patterns dominate real deployments—hierarchical coordination at the top, mesh patterns at the leaves.</p>
+<h3>The contrarian take: You probably don&#39;t need multi-agent orchestration yet</h3>
+<p><strong>Try this progression:</strong></p>
+<ol>
+<li><strong>Single agent + chain-of-thought prompting</strong> — solve 70% of problems</li>
+<li><strong>Add handoffs</strong> when specialization clearly helps (billing vs support)</li>
+<li><strong>Upgrade to swarms</strong> when proven necessary by actual performance data (not vendor marketing)</li>
+</ol>
+<h3>Framework consolidation ahead</h3>
+<p>Too many options exist today: OpenAI SDK, Ruflo, Swarms, DeerFlow, LangGraph, CrewAI, AutoGen. Market will likely converge on 2-3 winners over next 12 months. Choose frameworks with:</p>
+<ul>
+<li>Strong community support (active GitHub, Discord)</li>
+<li>Clear migration paths (export/import patterns)</li>
+<li>Production track record (not just demos)</li>
+</ul>
+<h2>Production Checklist: What to Implement Before Shipping</h2>
+<p>Regardless of framework choice, production systems need:</p>
+<h3>1. Error Handling &amp; Retries</h3>
+<pre><code class="language-python">async def safe_agent_run(agent, input, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return await agent.run(input)
+        except RecoverableError as e:
+            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+        except FatalError:
+            raise  # Don&#39;t retry
+    raise MaxRetriesExceeded()
+</code></pre>
+<h3>2. Circuit Breakers</h3>
+<p>Stop flooding dying services. Monitor failure rates, open circuit when threshold exceeded, attempt reset periodically.</p>
+<h3>3. Timeout Management</h3>
+<p>Hierarchical timeouts: tool calls (5s) &lt; agent steps (30s) &lt; full plan (5min). Fail fast with recovery.</p>
+<h3>4. Observability</h3>
+<ul>
+<li>Structured logging (tool calls, latency, tokens, errors)</li>
+<li>Distributed tracing (OpenTelemetry, Langfuse, Arize)</li>
+<li>Metrics (success rate, P95 latency, cost per session)</li>
+</ul>
+<h3>5. Cost Controls</h3>
+<p>Per-session token budgets, per-user spending caps, automatic downgrade to cheaper models when budget exceeded.</p>
+<h3>6. Guardrails</h3>
+<p>Input validation (prompt injection defense), output sanitization (PII redaction, hallucination checks), rate limiting.</p>
+<h2>Key Takeaways</h2>
+<ol>
+<li><p><strong>Architecture first, framework second</strong> — Decide handoffs (centralized) vs swarms (decentralized) based on coordination needs, <strong>then</strong> pick the framework implementing that pattern.</p>
+</li>
+<li><p><strong>Performance gains are real</strong> — 100% vs 1.7% actionable rates prove multi-agent systems work when implemented correctly. But poor orchestration is worse than single agents.</p>
+</li>
+<li><p><strong>Cost optimization is mandatory</strong> — 5x-20x token consumption requires tiered routing: WASM for simple tasks, cheap models for medium complexity, premium models only for high-stakes work.</p>
+</li>
+<li><p><strong>Start simple</strong> — Single agent + good prompts outperform poorly orchestrated swarms. Add handoffs when specialization helps. Upgrade to swarms when proven necessary by performance data.</p>
+</li>
+<li><p><strong>Framework selection matters long-term</strong>:</p>
+<ul>
+<li><strong>OpenAI SDK</strong> → enterprise support, safety-critical, handoff workflows</li>
+<li><strong>Ruflo</strong> → software development, cost optimization, 60+ specialized agents</li>
+<li><strong>Swarms</strong> → pattern experimentation, research workflows, flexibility</li>
+<li><strong>DeerFlow</strong> → research/content creation, sandboxed isolation, persistent memory</li>
+</ul>
+</li>
+<li><p><strong>Expect consolidation</strong> — Too many frameworks exist today. Market will converge on 2-3 winners. Choose based on community support, migration paths, production track record.</p>
+</li>
+<li><p><strong>Production isn&#39;t optional</strong> — Error handling, circuit breakers, timeouts, observability, cost controls, guardrails. Demos skip these; production requires them.</p>
+</li>
+</ol>
+<p>The orchestration wars just began. Choose your architecture wisely—rewrites are expensive.</p>
+<hr>
+<p><strong>Further Reading:</strong></p>
+<ul>
+<li><a href="https://openai.github.io/openai-agents-python/">OpenAI Agents SDK Documentation</a></li>
+<li><a href="https://arxiv.org/abs/2511.15755">arXiv 2511.15755: Multi-Agent Incident Response Study</a></li>
+<li><a href="https://github.com/ruvnet/ruflo">Ruflo GitHub Repository</a></li>
+<li><a href="https://github.com/kyegomez/swarms">Swarms Framework</a></li>
+<li><a href="https://github.com/bytedance/deer-flow">DeerFlow 2.0 (ByteDance)</a></li>
+</ul>
+
+</body>
+</html>
