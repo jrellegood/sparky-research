@@ -2,13 +2,17 @@
 
 ---
 **Metadata**
-- Last Updated: 2026-03-22
+- Last Updated: 2026-03-30
 - Primary References:
   - "LLMs as CPUs, Agents as Processes: Operating System Architecture" (Sparky Research, 2026-03-18)
   - "Four Emerging Agentic Patterns" (Sparky Research, 2026-03-21)
   - "Multi-Model Routing: Architecture Over Intelligence" (Sparky Research, 2026-03-22)
-- Staleness Risk: **Low** (fresh content, production-focused)
-- Next Review: 2026-06-22
+  - "Planning & Task Decomposition: Why Your Agent Fails at Complex Goals" (Sparky Research, 2026-03-23)
+  - "LangGraph vs Temporal vs Custom Orchestrators: The 2026 Decision Matrix" (Sparky Research, 2026-03-30)
+  - "Google's 421-Page Agentic Design Patterns" (Sparky Research, 2026-03-24)
+  - "AI Agents in Production: The Reliability Gap" (Sparky Research, 2026-03-27)
+- Staleness Risk: **Low** (updated with latest orchestration frameworks and planning patterns)
+- Next Review: 2026-06-30
 ---
 
 ## The Fundamental Architecture
@@ -130,35 +134,218 @@ def reflect(task, max_rounds=3):
 - Real-time latency requirements (<2s)
 - Low-cost, high-volume scenarios
 
-### 3. Planning (Think Before Acting)
+### 3. Planning & Task Decomposition
 
-**Pattern:** Decompose the task into subtasks before execution. Create a plan, then execute step-by-step.
+**Pattern:** Decompose complex goals into subtasks before execution. Create a plan, then execute step-by-step with adaptation.
 
-**Two variants:**
+#### Why Planning Matters
 
-**Plan-and-Execute (serial):**
+**ReAct agents think one step ahead** (reactive). **Planning agents think many steps ahead** (anticipatory).
+
+Planning helps with:
+- **Global constraints:** Some requirements only visible when viewing the whole problem
+- **Reduced redundancy:** Avoid fetching the same document three times
+- **Recovery scaffolding:** When step 4 fails, you know steps 3 and 5 for repair context
+
+#### Task Decomposition Strategies
+
+**1. Hierarchical Decomposition:**
+Break complex goals into progressively simpler subgoals.
+
 ```
-1. Plan: Generate full task breakdown
-2. Execute: Run each subtask sequentially
-3. Adapt: Revise plan if a step fails
+"Write research report on climate change"
+├─ Gather sources
+│  ├─ Search academic databases
+│  ├─ Search news archives
+│  └─ Identify expert opinions
+├─ Extract key findings
+│  └─ For each source, summarize key claims
+├─ Organize by theme
+│  └─ Cluster findings by topic
+└─ Write the report
+   ├─ Draft intro
+   ├─ Body sections
+   └─ Conclusion
 ```
 
-**ReWOO (Planner-Worker-Solver):**
-```
-1. Planner: Create task DAG with dependencies
-2. Worker: Execute tasks in parallel where possible
-3. Solver: Aggregate results into final answer
+**2. Sequential vs Parallel:**
+Identify data dependencies to enable parallelism.
+
+- **Sequential:** Summarizing documents must follow searching for them
+- **Parallel:** Searching three databases can happen simultaneously
+
+**3. Five Decomposition Approaches:**
+
+- **Chain-of-Thought:** Break reasoning into explicit steps
+- **Least-to-Most:** Solve simplest subproblem first, use solution for next
+- **Divide-and-Conquer:** Split problem into independent pieces, solve separately
+- **Goal Decomposition:** Backward-chain from goal to current state
+- **Plan-Sketch Refinement:** High-level plan first, then detail each step
+
+**What makes good decomposition:**
+- **Complete:** All necessary steps included
+- **Non-redundant:** No duplicate work
+- **Well-specified interfaces:** Clear what each step produces/consumes
+- **Appropriately granular:** Not too vague ("gather sources") nor too detailed ("type 'climate' into search box")
+
+#### Five Planning Architectures
+
+**1. Plan-and-Execute (Simple, Brittle)**
+
+Generate complete plan upfront, execute sequentially.
+
+```python
+# 1. Plan
+plan = llm.generate("Break down: " + task)
+
+# 2. Execute
+for step in plan.steps:
+    result = execute_tool(step)
+    
+# 3. Return results
+return aggregate(results)
 ```
 
-**When to use:**
-- Complex tasks with clear subtask structure
-- Multi-step workflows (e.g., research → summarize → email)
-- When intermediate validation is critical
+**Pros:** Simple, explicit structure  
+**Cons:** Brittle (plan wrong → everything fails), no adaptation
 
-**Production gotchas:**
-- Plans can be wrong—need adaptation logic
-- Over-planning wastes tokens on unnecessary detail
-- Parallel execution (ReWOO) requires careful dependency tracking
+**2. ReWOO (Dependencies Enable Parallelism)**
+
+Explicit dependency graph, parallel execution where possible.
+
+```python
+# 1. Plan with dependencies
+plan = llm.generate_dag(task)  # Returns DAG with dependencies
+
+# 2. Execute with parallelism
+results = {}
+while plan.has_unfinished():
+    ready_tasks = plan.get_ready_tasks()  # No unmet dependencies
+    results.update(parallel_execute(ready_tasks))
+    plan.mark_complete(ready_tasks)
+
+# 3. Solve
+return llm.aggregate(results)
+```
+
+**Pros:** Parallel execution, explicit dependencies  
+**Cons:** Still no mid-execution replanning
+
+**3. Tree-of-Thought (Search Over Reasoning)**
+
+Explore multiple reasoning paths, backtrack when stuck.
+
+```python
+def tree_search(task, max_depth=5):
+    frontier = [initial_state(task)]
+    
+    for depth in range(max_depth):
+        next_frontier = []
+        
+        for state in frontier:
+            # Generate 3-5 possible next steps
+            candidates = llm.generate_candidates(state, n=3)
+            
+            # Score each candidate
+            for candidate in candidates:
+                score = evaluate(candidate)
+                if score > threshold:
+                    next_frontier.append(candidate)
+        
+        frontier = sorted(next_frontier, key=lambda s: s.score)[:beam_width]
+        
+        # Check if any solution found
+        for state in frontier:
+            if is_complete(state):
+                return state
+```
+
+**Pros:** Robust to dead ends, explores alternatives  
+**Cons:** Expensive (3-10x token cost), slow
+
+**4. PlanReAct (Most Common Production Pattern)**
+
+Initial plan + ReAct execution with revision capability.
+
+```python
+# 1. Plan
+plan = llm.generate_plan(task)
+
+# 2. Execute with adaptation
+for step in plan.steps:
+    thought = llm.reason(step, current_state)
+    action = llm.decide_action(thought)
+    result = execute_tool(action)
+    
+    # 3. Check if replan needed
+    if requires_replanning(result):
+        plan = llm.revise_plan(plan, current_state, result)
+```
+
+**Pros:** Upfront structure + mid-execution adaptation  
+**Cons:** Replanning logic can be complex
+
+**5. Graph-Based (Explicit DAG Orchestration)**
+
+LangGraph-style state machine with explicit branching/loops.
+
+```python
+from langgraph.graph import StateGraph
+
+graph = StateGraph(AgentState)
+graph.add_node("plan", generate_plan)
+graph.add_node("execute_step", execute_next_step)
+graph.add_node("validate", validate_result)
+graph.add_node("replan", revise_plan)
+
+graph.add_edge("plan", "execute_step")
+graph.add_conditional_edges("validate", {
+    "success": "execute_step",  # Next step
+    "failure": "replan",         # Revise plan
+    "complete": END              # Done
+})
+```
+
+**Pros:** Explicit control flow, visual debugging, human-in-loop gates  
+**Cons:** More code, requires framework (LangGraph/Temporal)
+
+#### Plan Execution Challenges
+
+**Context window management:**
+- Raw plan + all tool results can overflow context
+- Solution: Hierarchical summarization or structured memory (see Memory Systems chapter)
+
+**Tool failures:**
+Three types:
+1. **Recoverable:** Retry with backoff
+2. **Fixable:** Revise parameters and retry
+3. **Plan-invalidating:** Replan from scratch
+
+**Semantic failures:**
+Tool succeeds but result doesn't make sense. Detect via validation step.
+
+#### Plan Revision & Recovery
+
+**Three replanning triggers:**
+1. **Execution failure:** Tool returned error
+2. **Observation surprise:** Result contradicts assumptions
+3. **Goal clarification:** User provides new info
+
+**Three replanning strategies:**
+1. **Local repair:** Fix just the failing step
+2. **Suffix replanning:** Keep completed steps, replan remainder
+3. **Full replanning:** Start over with new knowledge
+
+**Reflexion pattern:** Before replanning, self-critique to understand what went wrong. Store failure modes as "verbal gradient" to avoid repeating mistakes.
+
+#### When NOT to Plan
+
+- **Single-step tasks:** Overhead exceeds benefit
+- **Highly dynamic environments:** Plan will be immediately obsolete
+- **Exploratory work:** Discovery-driven, not goal-driven
+- **Tight cost constraints:** Planning adds 20-50% token overhead
+
+**Production takeaway:** Start with PlanReAct. Add Tree-of-Thought only when hitting clear dead-end problems. Most teams over-plan; simple ReAct often sufficient.
 
 ## Emerging Patterns (Production-Tested, Not Yet Standard)
 
@@ -583,6 +770,259 @@ elif iterations > 10:
 ```
 
 **Production pattern:** Combine all three. Max iterations as safety, goal completion as success, confidence as early exit.
+
+## Orchestration Frameworks: LangGraph vs Temporal vs Custom
+
+**The decision:** How do you turn "talented freelancer" into "reliable workflow engine"?
+
+By March 2026, three viable approaches have emerged:
+
+### 1. LangGraph (Graph-Based State Machines)
+
+**Mental model:** Your agent is a flowchart where boxes are actions and arrows are conditional transitions.
+
+**Core primitives:**
+- **State schema:** Typed dictionary with reducer functions (accumulate vs overwrite)
+- **Nodes:** Functions that read state, do work, update state
+- **Edges:** Unconditional (A always → B) or conditional (router functions)
+- **Checkpointing:** Persist state at every step for recovery/debugging
+
+**Minimal example:**
+```python
+from langgraph.graph import StateGraph, END
+
+class AgentState(TypedDict):
+    messages: list
+    intent: str
+    customer_id: str | None
+
+async def classify_intent(state: AgentState) -> AgentState:
+    intent = await llm.classify(state["messages"][-1])
+    return {"intent": intent}
+
+graph = StateGraph(AgentState)
+graph.add_node("classify", classify_intent)
+graph.add_conditional_edges("classify", route_after_classify)
+
+# Checkpointing for durability
+from langgraph.checkpoint.postgres import PostgresSaver
+checkpointer = PostgresSaver.from_conn_string("postgresql://...")
+app = graph.compile(checkpointer=checkpointer)
+```
+
+**Human-in-the-loop with interrupt():**
+```python
+from langgraph.types import interrupt
+
+async def request_approval(state: AgentState):
+    if state["order"]["amount"] > 10000:
+        approval = interrupt({
+            "question": "Approve this $100+ refund?",
+            "context": state["order"]
+        })
+        return {"approval_status": approval}
+```
+
+Graph pauses until human responds via API.
+
+**When to use:**
+- Complex branching logic (approval workflows, conditional routing)
+- Human-in-the-loop requirements
+- Need visual debugging (graph = diagram)
+- <10-step workflows
+- Python-only teams
+
+**Trade-offs:**
+- **Python-only:** No TypeScript/Go/Rust support
+- **State management overhead:** Checkpointing adds 50-100ms per step
+- **Learning curve:** Graph model less intuitive than imperative code
+
+### 2. Temporal (Durable Workflow Engine)
+
+**Mental model:** Your agent is an async function that survives crashes, deploys, and restarts.
+
+**Core concepts:**
+- **Workflows:** Durable functions that can run for hours/days
+- **Activities:** Individual work units (API calls, LLM calls, tool execution)
+- **Timers:** Built-in delays and timeouts
+- **Signals:** External events can interrupt workflows
+
+**Minimal example:**
+```python
+from temporalio import workflow, activity
+from datetime import timedelta
+
+@activity.defn
+async def call_llm(prompt: str) -> str:
+    return await llm.generate(prompt)
+
+@activity.defn  
+async def execute_tool(tool_call: dict) -> dict:
+    return await run_tool(tool_call)
+
+@workflow.defn
+class AgentWorkflow:
+    @workflow.run
+    async def run(self, task: str) -> str:
+        # Durable loop - survives crashes/deploys
+        for i in range(10):
+            # Call LLM (activity with retry policy)
+            response = await workflow.execute_activity(
+                call_llm,
+                task,
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RetryPolicy(maximum_attempts=3)
+            )
+            
+            # Execute tool if needed
+            if response.has_tool_call:
+                result = await workflow.execute_activity(
+                    execute_tool,
+                    response.tool_call,
+                    start_to_close_timeout=timedelta(minutes=5)
+                )
+                task = f"{task}\n\nTool result: {result}"
+            else:
+                return response.text
+```
+
+**Why Temporal wins at durability:**
+- Workflow pauses, server crashes, workflow resumes from exact same point
+- No checkpoint databases to manage (Temporal handles it)
+- Timeouts/retries are first-class: `start_to_close_timeout`, `retry_policy`
+
+**When to use:**
+- Long-running workflows (hours to days)
+- Mission-critical tasks (can't afford data loss)
+- Need built-in retry/timeout policies per activity
+- Multi-service orchestration (Temporal Workers in different languages/services)
+- Workflows that outlive deployments
+
+**Trade-offs:**
+- **Infrastructure complexity:** Run Temporal server cluster (or pay for Temporal Cloud)
+- **Latency overhead:** 50-100ms per activity invocation
+- **Deterministic workflow code:** Can't use random(), time.time() directly (must go through Temporal APIs)
+- **Learning curve:** Workflow vs activity distinction takes time
+
+### 3. Custom Orchestrators (Roll Your Own)
+
+**Mental model:** Direct async/await with explicit state management.
+
+**Minimal implementation (~200 lines):**
+```python
+class CustomOrchestrator:
+    def __init__(self):
+        self.state_store = Redis()  # or PostgreSQL
+    
+    async def execute_workflow(self, workflow_id: str, steps: list):
+        state = await self.state_store.get(workflow_id) or {}
+        
+        for step in steps:
+            # Skip completed steps (resume logic)
+            if step["id"] in state.get("completed", []):
+                continue
+            
+            # Check dependencies
+            if not self._dependencies_met(step, state):
+                continue
+            
+            # Execute with retry
+            result = await self._execute_with_retry(step, max_attempts=3)
+            
+            # Save state
+            state["completed"].append(step["id"])
+            state["results"][step["id"]] = result
+            await self.state_store.set(workflow_id, state)
+        
+        return state["results"]
+    
+    async def _execute_with_retry(self, step, max_attempts):
+        for attempt in range(max_attempts):
+            try:
+                return await step["fn"](step["args"])
+            except RetryableError as e:
+                if attempt == max_attempts - 1:
+                    raise
+                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+```
+
+**Dependency-aware parallel execution:**
+```python
+async def execute_dag(steps_dag):
+    completed = set()
+    results = {}
+    
+    while len(completed) < len(steps_dag):
+        # Find ready steps (dependencies met)
+        ready = [s for s in steps_dag 
+                 if s["id"] not in completed 
+                 and all(dep in completed for dep in s["deps"])]
+        
+        # Execute in parallel
+        tasks = [execute_step(s) for s in ready]
+        step_results = await asyncio.gather(*tasks)
+        
+        # Update state
+        for step, result in zip(ready, step_results):
+            completed.add(step["id"])
+            results[step["id"]] = result
+    
+    return results
+```
+
+**When to use:**
+- Simple workflows (<10 steps)
+- Performance-critical paths (avoid framework overhead)
+- Full control over retry/timeout logic
+- No budget for Temporal infrastructure
+- Team prefers explicit code over framework magic
+
+**Trade-offs:**
+- **No persistence by default:** Must implement checkpointing yourself
+- **No observability by default:** Must add logging/metrics
+- **More code:** You own the orchestration logic
+- **Debugging harder:** No framework-provided visualizations
+
+### Decision Matrix
+
+| Criteria | LangGraph | Temporal | Custom |
+|----------|-----------|----------|--------|
+| **Workflow Duration** | Minutes | Hours to days | Minutes |
+| **Branching Complexity** | High (graph model) | Medium (code-based) | Medium (code-based) |
+| **Human-in-Loop** | Built-in (interrupt) | Via signals | Manual implementation |
+| **Durability** | Checkpoint DB required | Built-in (Temporal Server) | Manual (Redis/Postgres) |
+| **Performance** | 50-100ms/step overhead | 50-100ms/activity overhead | ~5ms (no framework) |
+| **Observability** | Graph visualization | Temporal UI | DIY (Datadog/etc) |
+| **Language Support** | Python only | Python, Go, TypeScript, Java | Any |
+| **Learning Curve** | Medium (graph model) | High (workflow/activity model) | Low (pure async/await) |
+| **Infrastructure** | App + checkpoint DB | App + Temporal cluster | App + state store |
+| **Best For** | Complex approval workflows | Mission-critical long tasks | Simple performance-critical |
+
+### Hybrid Production Patterns
+
+Most teams don't pick one exclusively:
+
+**Pattern 1: Temporal top-level + LangGraph for AI logic**
+- Temporal orchestrates multi-hour workflow
+- Specific AI-heavy steps use LangGraph subgraphs
+- Combines durability (Temporal) with AI-friendly branching (LangGraph)
+
+**Pattern 2: LangGraph with selective checkpointing**
+- Checkpoint only before expensive/risky steps
+- Reduces overhead from 100ms/step to 10ms/step
+- Trade durability for performance on low-risk steps
+
+**Pattern 3: Custom orchestrator + Temporal for batch**
+- Real-time requests use custom (low latency)
+- Background/batch jobs use Temporal (durability)
+
+**Common mistake:** Picking LangGraph because it's popular, not because it fits. Most workflows are <5 steps and don't need graph-based orchestration. Start custom, upgrade when you hit clear limits.
+
+### Gartner Prediction Reality Check
+
+Gartner says 40% of enterprises will adopt agentic capabilities by end-2026. **Also says 40% of projects will fail by 2027 due to unreliable execution.**
+
+Translation: Most teams will over-invest in orchestration frameworks without fixing the fundamentals (good tool design, proper error handling, realistic termination logic). Architecture beats tooling.
 
 ## When to Use Multiple Agents
 

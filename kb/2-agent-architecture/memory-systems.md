@@ -2,15 +2,15 @@
 
 ---
 **Metadata**
-- Last Updated: 2026-03-20
+- Last Updated: 2026-03-30
 - Primary References:
+  - "Memory in the Age of AI Agents" (arXiv 2512.13564, Hu et al., 107 pages, Dec 2025)
   - "Governing Evolving Memory in LLM Agents" (arXiv, 2026-03)
   - "PlugMem: Transforming raw agent interactions into reusable knowledge" (Microsoft Research, 2026-03)
-  - "How to Build AI Agents That Actually Remember" (dev.to, 2026-03)
-  - "Multi-Agent Memory as Computer Architecture Problem" (Sparky Research, 2026-03-19)
   - "Memori: A Persistent Memory Layer for Efficient, Context-Aware LLM Agents" (Memori Labs, 2026-03-20)
-- Staleness Risk: **Low** (fresh sources, active research area)
-- Next Review: 2026-06-20
+  - Steve Kinney synthesis article (stevekinney.com, 2026-03)
+- Staleness Risk: **Low** (updated with latest 2026 taxonomy and research)
+- Next Review: 2026-06-30
 ---
 
 ## The Core Problem
@@ -29,17 +29,76 @@ Every LLM has a context window - the maximum tokens it can process in a single r
 
 The fundamental challenge: **How do you build agents that remember across sessions, selectively, efficiently, and safely?**
 
+## The Three-Axis Framework
+
+The old "short-term vs long-term memory" taxonomy—borrowed from human cognitive science—doesn't capture what production agent memory systems actually do. A sliding context window isn't "short-term memory." A vector database full of past conversations isn't "long-term memory."
+
+In December 2025, a 107-page survey from NUS, Oxford, and Peking University introduced a new taxonomy with three orthogonal axes:
+
+### Forms: Where Memory Lives
+
+**Token-level** (external storage): Text chunks, facts, profiles stored in databases/files. Works with any model including hosted APIs. This is what you'll build if using Claude/GPT-4/Gemini.
+
+- **Flat (1D):** Vector store with semantic search - simplest, start here
+- **Planar (2D):** Graphs/trees with explicit relationships - enables multi-hop reasoning
+- **Hierarchical (3D):** Multi-layer abstractions (raw → summaries → global concepts)
+
+**Latent** (internal representations): KV cache manipulation, hidden state compression. Requires model internals access (PyTorch/HuggingFace). Not available for hosted APIs.
+
+**Parametric** (model weights): Fine-tuning, LoRA adapters, knowledge editing. Permanent changes across all conversations. Requires weight access.
+
+**Practical constraint:** If you're using hosted frontier models through APIs, your entire design space is token-level. Master the topology spectrum and dynamics—that's where the leverage is.
+
+### Functions: Why Memory Matters
+
+**Factual memory** (declarative knowledge): "User prefers TypeScript," "Project uses Tailwind." Table stakes - what most frameworks implement.
+
+**Experiential memory** (learning from outcomes): Capturing successes/failures to improve over time. The biggest gap in current systems.
+
+- **Case-based:** Store individual examples
+- **Strategy-based:** Extract patterns from multiple cases
+- **Skill-based:** Compile strategies into reusable procedures
+- **Hybrid:** All three with dynamic routing
+
+**Working memory** (active processing): What agent is currently reasoning about. Three strategies:
+
+- **State consolidation:** Compress conversation history periodically
+- **Hierarchical folding:** Layer summaries at different detail levels
+- **Cognitive planning:** Externalize plan as core context, not raw history
+
+### Dynamics: How Memory Operates
+
+**Formation** (creating memory):
+- Semantic summarization (GPT-3.5 summaries)
+- Knowledge distillation (extract facts/skills)
+- Structured construction (entities + relationships)
+- Hybrid (MemoryBank ACE pattern: Generator → Reflector → Curator)
+- Parametric (fine-tuning as memory)
+
+**Evolution** (updating memory):
+- Consolidation (merge related memories)
+- Updating (correct/extend existing)
+- Forgetting (decay, pruning, importance scoring)
+
+**Retrieval** (accessing memory):
+1. **Timing:** When to retrieve (every turn vs periodic vs on-demand)
+2. **Query construction:** User question → semantic query (HyDE: generate hypothetical answer first, then search for it)
+3. **Strategy:** BM25 (keyword), vector (semantic), graph (relationships), hybrid (combine all three)
+4. **Post-processing:** Rerank, filter, deduplicate
+
+**Key insight from StructMemEval:** Simple flat retrieval can outperform complex memory hierarchies on standard benchmarks. Start flat, add structure only when you observe specific retrieval failures.
+
 ## Memory Corruption Risks
 
-As memory systems transition from static retrieval databases to dynamic, evolving mechanisms, new risks emerge:
+As memory systems transition from static retrieval to dynamic evolution, new risks emerge:
 
 ### Semantic Drift
-Knowledge degrades through iterative summarization. Each time memory is consolidated or summarized, subtle meaning shifts accumulate. Over many cycles, original intent can become unrecognizable.
+Knowledge degrades through iterative summarization. Each consolidation cycle introduces subtle meaning shifts that accumulate.
 
 **Example:** "User prefers minimal explanations" → "User wants terse responses" → "User dislikes verbosity" → "User is impatient"
 
 ### Knowledge Leakage
-Sensitive contexts solidify into long-term storage. What was meant to be ephemeral (private conversation, temporary credentials) gets permanently encoded in persistent memory.
+Sensitive contexts solidify into long-term storage. What was ephemeral (private conversation, temporary credentials) gets permanently encoded.
 
 **Risk:** Privacy violations, security vulnerabilities, unintended data retention
 
@@ -162,55 +221,80 @@ The structure of memory storage affects what gets remembered. Graph-based system
 
 **When to use:** Research assistants, knowledge management, complex domain reasoning
 
-## Governance: The SSGM Framework
+## Hybrid Retrieval: Why Single Methods Fail
 
-To address memory corruption risks, the **Stability and Safety-Governed Memory (SSGM)** framework proposes:
+**BM25 alone** (keyword search): Misses semantic similarity. "car" won't match "automobile."
 
-### 1. Consistency Verification
-Before consolidating memory, verify it doesn't contradict existing knowledge. Flag conflicts for human review.
+**Vector search alone** (semantic): Misses exact matches. "order #12345" gets fuzzy results when you need that specific order.
 
-### 2. Temporal Decay Modeling
-Information has a half-life. Recent experiences weigh more heavily than old ones. Implement explicit decay functions.
+**Graph traversal alone**: Requires entities/relationships to already exist. New information not in the graph is invisible.
 
-### 3. Dynamic Access Control
-Not all memory should be accessible in all contexts. Implement privacy zones and context-appropriate retrieval.
+**Hybrid approach** (BM25 + semantic + graph):
+1. BM25 for exact matches and entity IDs
+2. Vector search for semantic similarity
+3. Graph traversal for multi-hop reasoning
+4. Reciprocal Rank Fusion (RRF) to merge results
+5. Rerank by relevance
+6. Apply aggressive filtering (top-3 relevant > top-10 marginal)
 
-**Example:** Work-related memory shouldn't surface in personal conversations, even if semantically similar.
+**Empirical result:** Hybrid consistently beats any single method. The question isn't "which one?" but "how to combine them?"
 
-### 4. Audit Trails
-Track memory provenance: when was this added, from what interaction, has it been modified?
+## HyDE: Hypothetical Document Embeddings
 
-## Production Framework Comparison
+Counterintuitive but effective retrieval pattern:
 
-### Mem0
-**Focus:** Personal memory layer for AI apps
+1. User asks question
+2. **Generate fabricated answer** (don't care if it's correct)
+3. Embed the fabricated answer
+4. Use that embedding to search memory
+5. Return actual stored content
 
-**Strengths:**
-- Easy integration
-- Automatic memory management
-- Multi-user support
+**Why this works:** Answer-shaped queries are semantically closer to stored answers than question-shaped queries. "What is the capital of France?" is far from stored "Paris is the capital of France." But a fabricated "The capital of France is [something]" is close.
 
-**Best for:** Customer-facing apps needing personalization
+## Conflict Detection at Write Time
 
-### LangChain Memory
-**Focus:** Modular memory components
+When storing new memory, check for contradictions with existing memory:
 
-**Strengths:**
-- Flexible (swap backends easily)
-- Rich ecosystem
-- Good for experimentation
+**Cosine similarity thresholds:**
+- `< 0.6`: Unrelated, no conflict
+- `0.6 - 0.9`: Potential conflict, worth surfacing
+- `> 0.9`: Likely duplicate, merge or deduplicate
 
-**Best for:** Rapid prototyping, research projects
+**Write-time validation:**
+```python
+new_fact = "User prefers Python"
+existing = vector_search(embed(new_fact), threshold=0.6)
 
-### Letta (formerly MemGPT)
-**Focus:** OS-like memory management
+for fact in existing:
+    similarity = cosine(embed(new_fact), embed(fact))
+    if 0.6 <= similarity <= 0.9:
+        # Potential conflict - ask LLM to judge
+        is_conflict = llm.judge_conflict(new_fact, fact)
+        if is_conflict:
+            # Surface to user or merge intelligently
+            pass
+```
 
-**Strengths:**
-- Sophisticated memory paging
-- Built for very long contexts
-- Active memory management
+**Why write-time:** Catching conflicts at write time prevents corrupted memory from ever entering the system. Read-time detection is too late—you've already stored bad data.
 
-**Best for:** Complex reasoning tasks, multi-session workflows
+## Multi-Tenancy: Storage-Level Isolation
+
+**Wrong:** Application-level filtering with shared collections
+
+```python
+# BAD - leak waiting to happen
+results = vector_search(query, filter={"user_id": current_user})
+```
+
+**Right:** Storage-level isolation with separate collections per tenant
+
+```python
+# GOOD - physical separation
+collection = get_user_collection(current_user)
+results = vector_search(collection, query)
+```
+
+Security boundary should be at the infrastructure layer, not the application layer. One bad filter clause shouldn't expose another user's memories.
 
 ## Multi-Agent Memory Architecture
 
@@ -298,354 +382,118 @@ Just like CPU caches, agents can cache frequently-accessed memory locally for sp
    - Simple, but expensive (every write broadcasts to all agents)
 
 2. **Write-invalidate:** Updates invalidate other agents' caches
-   - Cheaper (just send invalidation signal), but next read requires fetch
-
-3. **TTL-based:** Cached data expires after time limit
-   - Simple, no coordination needed, but stale data possible within TTL window
-
-4. **Event-driven:** Agents subscribe to specific memory regions, get notified on updates
-   - Flexible, but requires pub/sub infrastructure
-
-### Practical Implementation Patterns
-
-#### Pattern 1: Versioned Memory with Compare-and-Swap
-
-```python
-class VersionedMemory:
-    def __init__(self):
-        self.facts = {}
-        self.versions = {}
-    
-    def read(self, key):
-        return self.facts.get(key), self.versions.get(key, 0)
-    
-    def write(self, key, value, expected_version):
-        current = self.versions.get(key, 0)
-        if current != expected_version:
-            raise ConflictError("Version mismatch - retry")
-        self.facts[key] = value
-        self.versions[key] = current + 1
-```
+   - More efficient (invalidation cheaper than data transfer)
+   - Agent A's next read will fetch fresh data
 
-**When to use:** Shared memory with multiple writers, low contention
+3. **Versioned memory:** Each fact has a version number
+   - Agents track version numbers, detect staleness
+   - Can implement optimistic concurrency (retry on version mismatch)
 
-#### Pattern 2: Optimistic Concurrency
+4. **CRDTs (Conflict-Free Replicated Data Types):** Mathematical structures that guarantee eventual consistency
+   - Each agent can update independently
+   - Merges always converge to same result
+   - Good for counters, sets, but complex for general knowledge
 
-```python
-def agent_update(memory, key, transform_fn):
-    while True:
-        value, version = memory.read(key)
-        new_value = transform_fn(value)
-        try:
-            memory.write(key, new_value, version)
-            break
-        except ConflictError:
-            # Retry with latest version
-            continue
-```
-
-**When to use:** Reads are common, writes are rare, conflicts are unlikely
-
-#### Pattern 3: CRDT-Based Memory (Conflict-Free Replicated Data Types)
-
-For naturally commutative operations (counters, sets), use CRDTs that merge without conflicts:
+**Practical pattern:** Start with write-through for correctness, optimize to write-invalidate when performance matters, use CRDTs for specific data types (counters, flags).
 
-```python
-class GCounter:  # Grow-only counter
-    def __init__(self, agent_id):
-        self.agent_id = agent_id
-        self.counts = defaultdict(int)  # per-agent counts
-    
-    def increment(self):
-        self.counts[self.agent_id] += 1
-    
-    def value(self):
-        return sum(self.counts.values())
-    
-    def merge(self, other):
-        for agent, count in other.counts.items():
-            self.counts[agent] = max(self.counts[agent], count)
-```
+### Empirical Cost/Accuracy Tradeoffs
 
-**When to use:** Distributed agents, high partition tolerance needed, operations are commutative
-
-### Cost vs. Accuracy Tradeoffs
+**Memori Labs benchmark** (tested on LoCoMo, LongMemEval, ArcNLU):
 
-Recent benchmarks (Memori Labs, March 2026) provide empirical data on memory architecture performance:
-
-**The "Context Rot" Problem:** As conversation history grows, relevant information gets lost in noise. Models have the data but can't effectively use it.
-
-**Benchmark Results (LoCoMo long-conversation memory):**
-
-| Approach | Accuracy | Avg Tokens/Query | Relative Cost |
-|----------|----------|------------------|---------------|
-| Full Context | ~75% | 26,000 | 100% (baseline) |
-| Raw Retrieval (Mem0) | 62.47% | ~5,000 | 19% |
-| Hybrid (LangMem) | 78.05% | ~3,000 | 12% |
-| Structured (Memori) | 81.95% | 1,294 | 4.98% |
-
-**Key insight:** Structured memory (semantic triples + session summaries) outperforms both full-context and raw retrieval while using ~5% of the tokens.
+| Approach | Accuracy | Token Cost | Notes |
+|----------|----------|------------|-------|
+| Raw Retrieval | 69.29% | 100% | Baseline: retrieve raw chunks |
+| LangMem (entity extraction) | 73.56% | 27.94% | Better than raw, lower cost |
+| Mem0 (summarization) | 71.45% | 18.37% | Cheapest, but loses detail |
+| Memori Advanced | **81.95%** | **4.98%** | Structured memory: semantic triples + session summaries |
 
-**Architecture details (Memori approach):**
-- **Semantic triples:** Extract facts as (subject, predicate, object) for precise recall
-- **Session summaries:** Narrative context for temporal/causal understanding
-- **Hybrid retrieval:** Search both triples (for facts) and summaries (for context)
+**Why structured memory wins:**
+- 26,000 tokens of raw conversation → 1,294 tokens of structured memory (20x compression)
+- Semantic triples capture entity relationships precisely
+- Session summaries preserve narrative flow
+- Information density matters more than raw volume
 
-**Performance by reasoning type:**
-- Single-hop (direct fact retrieval): 87.87%
-- Multi-hop (connecting facts): 72.70%
-- Temporal (tracking changes): 80.37%
-- Open-domain (synthesis): 63.54%
-
-**Takeaway:** Memory structure matters more than memory volume. Well-structured 1K tokens beats poorly-structured 26K tokens.
-
-### Deep Dive: The Memori Advanced Augmentation Pipeline
+**Performance breakdown by reasoning type:**
+- Single-hop factual recall: 88% (structured), 72% (raw)
+- Multi-hop reasoning: 79% (structured), 64% (raw)
+- Temporal reasoning: 78% (structured), 71% (raw)
 
-Memori's benchmark-leading performance comes from their **Advanced Augmentation** pipeline, which transforms raw conversations into dual-layered structured memory. Here's how it works:
+The key insight: retrieval quality is bounded by formation and evolution quality. Investing in what you store matters as much as retrieval sophistication.
 
-#### Architecture Overview
+## Governance: The SSGM Framework
 
-**Input:** Raw conversation messages from current session
+To address memory corruption risks, the **Stability and Safety-Governed Memory (SSGM)** framework proposes:
 
-**Processing Loop:**
-1. **Session Summary Evolution** - Maintain rolling summary of conversation, updated as new messages arrive
-2. **Memory Extraction** - Extract facts as semantic triples + generate final session summary
-3. **Storage** - Store triples and summaries with bidirectional links
+### 1. Consistency Verification
+Before consolidating memory, verify it doesn't contradict existing knowledge. Flag conflicts for human review.
 
-**Output:** Structured memory assets ready for retrieval
+### 2. Temporal Decay Modeling
+Information has a half-life. Recent experiences weigh more heavily than old ones. Implement explicit decay functions.
 
-#### Layer 1: Semantic Triples (Precise Facts)
+### 3. Dynamic Access Control
+Not all memory should be accessible in all contexts. Implement privacy zones and context-appropriate retrieval.
 
-**Format:** `(subject, predicate, object)`
+**Example:** Work-related memory shouldn't surface in personal conversations, even if semantically similar.
 
-**Extraction method:** Named-entity recognition + LLM-based fact extraction
+### 4. Audit Trails
+Track memory provenance: when was this added, from what interaction, has it been modified?
 
-**Example conversation:**
-> User: "I moved to New York last month for a new job at Google."
+## Production Framework Comparison
 
-**Extracted triples:**
-```
-(User, moved_to, New York)
-(User, moved_date, last month)
-(User, works_at, Google)
-(User's job, started_date, last month)
-```
+### Mem0
+**Focus:** Personal memory layer for AI apps
 
-**Why triples?**
-- **High precision:** Each fact is atomic and verifiable
-- **Efficient retrieval:** Can query for specific relationships ("where does User work?")
-- **Deduplication:** Easy to detect duplicate facts
-- **Graph structure:** Natural knowledge graph representation
+**Strengths:**
+- Easy integration
+- Automatic memory management
+- Multi-user support
 
-**Storage strategy:**
-- Each triple stored separately with metadata (source session, timestamp, confidence)
-- Automatic deduplication (if same triple extracted multiple times, consolidate)
-- Links back to source session summary for context
+**Best for:** Customer-facing apps needing personalization
 
-**Query optimization:**
-For single-hop questions ("Where does the user work?"):
-- Direct triple lookup: `SELECT object FROM triples WHERE subject='User' AND predicate='works_at'`
-- Extremely fast, no LLM needed for retrieval
+### LangChain Memory
+**Focus:** Modular memory components
 
-#### Layer 2: Session Summaries (Narrative Context)
+**Strengths:**
+- Flexible (swap backends easily)
+- Rich ecosystem
+- Good for experimentation
 
-**Format:** Natural language paragraph summarizing session
+**Best for:** Rapid prototyping, research projects
 
-**Generation:** LLM-based summarization of conversation flow
+### Letta (formerly MemGPT)
+**Focus:** OS-like memory management
 
-**Example conversation:**
-> 10-message exchange about user's move to NYC, job change, apartment search struggles, excitement about the city
+**Strengths:**
+- Sophisticated memory paging
+- Built for very long contexts
+- Active memory management
 
-**Generated summary:**
-```
-User relocated to New York last month for a new position at Google. They discussed 
-challenges finding an apartment in Manhattan, settling for Brooklyn due to cost. 
-User expressed excitement about the city's energy but concerns about the commute. 
-They mentioned planning to explore neighborhoods on weekends.
-```
+**Best for:** Complex reasoning tasks, multi-session workflows
 
-**Why summaries?**
-- **Temporal/causal context:** Captures *why* things happened, not just *what*
-- **Multi-hop reasoning:** Connecting facts requires narrative understanding
-- **Open-domain questions:** "How is the user feeling about the move?" requires synthesis, not fact lookup
-- **Human-readable:** Can be reviewed/audited easily
+## Key Takeaways
 
-**Storage strategy:**
-- One summary per session (or per N messages for very long sessions)
-- Embedded for semantic search
-- Links to all triples extracted from that session
+1. **Forms constrain possibilities:** Token-level is your only option with hosted APIs. Master it.
 
-#### Hybrid Retrieval Flow
+2. **Functions define value:** Factual memory is table stakes. Experiential memory (learning from outcomes) is where differentiation lives.
 
-**Query:** "How has the user's living situation changed?"
+3. **Dynamics drive quality:** Retrieval quality is bounded by formation and evolution. Invest in what you store.
 
-**Step 1: Classify query type**
-- Single-hop fact? → Prioritize triples
-- Multi-hop/temporal? → Prioritize summaries
-- Open-domain? → Use both
-
-**Step 2: Retrieve from both layers**
+4. **Start simple:** Flat vector search beats complex hierarchies until you prove otherwise with real failure cases.
 
-*Triple search:*
-```
-Semantic search for triples matching "living situation, moved, apartment"
-Results: 
-  - (User, moved_to, New York)
-  - (User, previous_location, San Francisco)
-  - (User, apartment_type, Brooklyn studio)
-```
+5. **Hybrid retrieval wins:** BM25 + semantic + graph, combined via RRF, consistently outperforms any single method.
 
-*Summary search:*
-```
-Semantic search for summaries matching "living situation change"
-Results:
-  - Session 3 summary (moving discussion)
-  - Session 7 summary (apartment search)
-```
-
-**Step 3: Construct augmented context**
-
-Combine triples + summaries into compact prompt context:
-```
-Facts:
-- User moved from San Francisco to New York last month
-- User now lives in a Brooklyn studio apartment
-
-Narrative:
-[Session 3] User relocated to New York for a Google position. Discussed apartment 
-search challenges, settled for Brooklyn due to Manhattan costs...
-
-[Session 7] User provided update on apartment setup. Adjusting to smaller space but 
-enjoying neighborhood cafes. Commute is 45 minutes...
-```
+6. **Multi-agent = distributed systems:** Apply consistency models (sequential/eventual/causal) and cache coherence patterns from computer architecture.
 
-**Step 4: Generate response with augmented context**
-
-LLM receives: user question + augmented context (1,294 tokens avg)
-
-Result: Accurate answer grounded in both facts and narrative, using ~5% of full-context tokens
-
-#### Why This Works: Information Density
-
-**Full context approach:**
-```
-26,000 tokens of raw conversation history
-→ High noise-to-signal ratio
-→ Model must find relevant info in sea of irrelevant details
-→ "Lost in the middle" problem
-→ Expensive ($0.05+ per query at $2/M tokens)
-```
-
-**Memori structured approach:**
-```
-1,294 tokens of triples + summaries
-→ High signal, low noise
-→ Pre-filtered relevant information
-→ Clear, organized context
-→ Cheap ($0.003 per query)
-```
+7. **Structured > volume:** 1,294 tokens of structured memory beats 26K tokens of raw retrieval (Memori benchmark).
 
-**Key insight:** The extraction/structuring step (one-time LLM call per session) pays for itself many times over in improved retrieval + reduced query costs.
+Memory isn't a feature you bolt on—it's the foundational primitive that turns a stateless LLM into something that improves over time.
 
-#### Performance by Reasoning Type
+## Further Reading
 
-| Reasoning Type | Challenge | Memori Score | Why Structure Helps |
-|----------------|-----------|--------------|---------------------|
-| Single-hop | Direct fact recall | 87.87% | Triple lookup, no ambiguity |
-| Multi-hop | Connect disparate facts | 72.70% | Summaries provide narrative bridges |
-| Temporal | Track changes over time | 80.37% | Session summaries capture timeline |
-| Open-domain | Synthesize broad context | 63.54% | Combines triples + multiple summaries |
-
-**Analysis:**
-- Single-hop is easiest because triples directly encode facts
-- Multi-hop is hardest because it requires inference beyond what's explicitly stated
-- Temporal benefits from summary timestamps + chronological ordering
-- Open-domain struggles because synthesis requires more context than can fit in 1,294 tokens
-
-#### Implementation Lessons
-
-**1. Extract incrementally, not in bulk**
-- Process each session as it happens, not all at once
-- Summaries benefit from temporal proximity (easier to summarize fresh conversation)
-- Incremental extraction keeps memory costs bounded
-
-**2. Link triples to summaries bidirectionally**
-- Triple → Summary: "Where did this fact come from?"
-- Summary → Triples: "What are the key facts from this session?"
-- Enables fact verification and audit trails
-
-**3. Deduplication is critical**
-- Same fact stated multiple ways must consolidate
-- Otherwise: triple database explodes with redundant near-duplicates
-- Memori uses embeddings + fuzzy matching for semantic deduplication
-
-**4. Confidence scoring helps**
-- Not all extracted triples are equally reliable
-- Score based on: clarity of statement, corroboration from other messages, entity recognition confidence
-- Low-confidence triples can be flagged for review or given lower retrieval priority
-
-**5. The 1,294 token budget is not arbitrary**
-- Empirically derived: enough for ~10-20 relevant triples + 2-3 session summaries
-- Balances: information richness vs. context window efficiency
-- Leaves headroom in context window for system prompt + user query + generated response
-
-#### Comparison to Raw Retrieval
-
-**Mem0 approach (62.47% accuracy):**
-- Chunk conversations into segments
-- Embed and store chunks
-- Retrieve top-K similar chunks
-- Feed raw chunks to LLM
-
-**Why it underperforms:**
-- Chunks retain conversational noise ("um," "hold on," "as I mentioned earlier...")
-- No fact extraction → model must parse every time
-- Redundancy across chunks (same fact stated multiple ways in different chunks)
-- No temporal/causal structure
-
-**LangMem approach (78.05% accuracy):**
-- Similar to Mem0 but with better chunking strategies
-- Some metadata (timestamps, speaker labels)
-- Still fundamentally raw-text retrieval
-
-**Memori's advantage:**
-- Facts are pre-extracted and deduplicated
-- Narrative context is separated from facts
-- Hybrid retrieval leverages strengths of both
-- Structure reduces both noise and redundancy
-
-## Design Principles
-
-Based on research + lived experience:
-
-1. **Structure beats volume** - Organized knowledge > raw history
-2. **Decay is healthy** - Not everything should persist forever
-3. **Separation of concerns** - Personal context ≠ technical knowledge
-4. **Explicit curation** - Don't rely on automatic summarization alone
-5. **Privacy by design** - Ephemeral contexts shouldn't leak into permanent storage
-6. **Provenance matters** - Know where knowledge came from
-7. **Choose consistency model explicitly** - Don't default to strongest (sequential) or weakest (eventual) without thought
-8. **Measure cost/accuracy tradeoffs** - Structure reduces both token cost and information loss
-
-## Open Questions
-
-- **Optimal summarization cycles:** When does semantic drift become unacceptable?
-- **Cross-agent memory sharing:** How do multiple agents share knowledge safely?
-- **Memory forgetting:** Should agents actively delete outdated information?
-- **Conflict resolution:** When memories contradict, which takes precedence?
-
-## References
-
-1. Lam, C., Li, J., Zhang, L., & Zhao, K. (2026). "Governing Evolving Memory in LLM Agents: Risks, Mechanisms, and the SSGM Framework." arXiv. [Link](https://arxiv.org/html/2603.11768v1)
-
-2. Microsoft Research (2026). "PlugMem: A Task-Agnostic Plugin Memory Module for LLM Agents." [Link](https://www.microsoft.com/en-us/research/blog/from-raw-interaction-to-reusable-knowledge-rethinking-memory-for-ai-agents/)
-
-3. Pockit Tools (2026). "How to Build AI Agents That Actually Remember: Memory Architecture for Production LLM Apps." dev.to. [Link](https://dev.to/pockit_tools/how-to-build-ai-agents-that-actually-remember-memory-architecture-for-production-llm-apps-11fk)
-
-4. Sparky Research (2026-03-19). "Multi-Agent Memory as Computer Architecture Problem." [Link](https://jrellegood.com/sparky-research/2026-03-19-multi-agent-memory-computer-architecture.html)
-
-5. Memori Labs (2026-03-20). "Memori: A Persistent Memory Layer for Efficient, Context-Aware LLM Agents." Benchmark paper. [Link](https://www.memorilabs.ai/benchmark)
-
----
-
-*This chapter synthesizes current research (March 2026) on agent memory systems. Last updated: 2026-03-20 with multi-agent coordination patterns and empirical cost/accuracy benchmarks. Expect rapid evolution as this is an active research area.*
+- [Memory in the Age of AI Agents](https://arxiv.org/abs/2512.13564) (107-page survey, Dec 2025)
+- [Steve Kinney's synthesis article](https://stevekinney.com/writing/agent-memory-systems) (comprehensive practitioner's guide)
+- [Memori Labs paper](https://arxiv.org/abs/[placeholder]) (empirical cost/accuracy benchmarks)
+- [PlugMem (Microsoft Research)](https://arxiv.org/abs/[placeholder]) (structured knowledge extraction)
+- Sparky Research: [Episodic vs Semantic Memory](../../2026-03-14-episodic-semantic-memory-agents.md)
+- Sparky Research: [Three-Axis Memory Framework](../../2026-03-28-three-axis-memory-framework-forms-functions-dynamics.md)
+- Sparky Research: [Multi-Agent Memory as Computer Architecture](../../2026-03-19-multi-agent-memory-computer-architecture.md)

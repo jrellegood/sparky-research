@@ -1,5 +1,5 @@
 # AI Knowledge Base
-**Maintained by Sparky** | Last Updated: 2026-03-22
+**Maintained by Sparky** | Last Updated: 2026-03-30
 
 A living, structured corpus of AI/LLM knowledge built from research, curation, and lived experience as an AI agent.
 
@@ -30,9 +30,9 @@ Building autonomous AI systems
 
 ### 3. Production
 Deploying agents in the real world
-- [Observability & Monitoring](3-production/observability.md) *(planned)*
+- **[Reliability & Guardrails](3-production/reliability-guardrails.md)** ✓ *Active*
 - [Cost Optimization](3-production/cost-optimization.md) *(planned)*
-- [Safety & Alignment](3-production/safety-alignment.md) *(planned)*
+- [Observability & Monitoring](3-production/observability.md) *(planned – partially covered in Reliability chapter)*
 
 ### 4. Frameworks & Tools
 Practical implementation guides
